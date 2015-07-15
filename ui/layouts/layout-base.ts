@@ -1,11 +1,12 @@
-﻿import definition = require("ui/layouts/layout");
+﻿import definition = require("ui/layouts/layout-base");
 import view = require("ui/core/view");
 import dependencyObservable = require("ui/core/dependency-observable");
+import proxy = require("ui/core/proxy");
 
-export class Layout extends view.CustomLayoutView implements definition.Layout, view.AddChildFromBuilder {
+export class LayoutBase extends view.CustomLayoutView implements definition.LayoutBase, view.AddChildFromBuilder {
 
-    public static clipToBoundsProperty = new dependencyObservable.Property("clipToBounds", "Layout", 
-        new dependencyObservable.PropertyMetadata(true, dependencyObservable.PropertyMetadataSettings.None, Layout.onClipToBoundsPropertyChanged));
+    public static clipToBoundsProperty = new dependencyObservable.Property("clipToBounds", "LayoutBase", 
+        new proxy.PropertyMetadata(true, dependencyObservable.PropertyMetadataSettings.None, LayoutBase.onClipToBoundsPropertyChanged));
 
     private _subViews: Array<view.View> = new Array<view.View>();
 
@@ -59,6 +60,13 @@ export class Layout extends view.CustomLayoutView implements definition.Layout, 
         }
     }
 
+    get padding(): string {
+        return this.style.padding;
+    }
+    set padding(value: string) {
+        this.style.padding = value;
+    }
+
     public get paddingTop(): number {
         return this.style.paddingTop;
     }
@@ -87,15 +95,12 @@ export class Layout extends view.CustomLayoutView implements definition.Layout, 
         this.style.paddingLeft = value;
     }
 
-    private static onClipToBoundsPropertyChanged(data: dependencyObservable.PropertyChangeData) {
-        var layout = <Layout>data.object;
-        var nativeView: Object = layout._nativeView;
-        var value = <boolean>data.newValue;
-        if (nativeView instanceof android.view.ViewGroup) {
-            (<android.view.ViewGroup>nativeView).setClipChildren(value);
-        }
-        else if (nativeView instanceof UIView) {
-            (<UIView>nativeView).clipsToBounds = value;
-        }
+    protected onClipToBoundsChanged(oldValue: boolean, newValue: boolean) {
+        //
+    }
+
+    private static onClipToBoundsPropertyChanged(data: dependencyObservable.PropertyChangeData): void {
+        var layout = <LayoutBase>data.object;
+        layout.onClipToBoundsChanged(data.oldValue, data.newValue);
     }
 } 
