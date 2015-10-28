@@ -1,8 +1,9 @@
-﻿import common = require("ui/search-bar/search-bar-common");
+﻿import common = require("./search-bar-common");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
 import color = require("color");
 import types = require("utils/types");
+import utils = require("utils/utils")
 
 var SEARCHTEXT = "searchText";
 var QUERY = "query";
@@ -90,12 +91,24 @@ function _changeSearchViewHintColor(bar: android.widget.SearchView, color: numbe
     }
 }
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 export class SearchBar extends common.SearchBar {
     private _android: android.widget.SearchView;
+
+    public dismissSoftInput() {
+        utils.ad.dismissSoftInput(this._nativeView);
+    }
+
+    public focus(): boolean {
+        var result = super.focus();
+
+        if (result) {
+            utils.ad.showSoftInput(this._nativeView);
+        }
+
+        return result;
+    }
 
     public _createUI() {
         this._android = new android.widget.SearchView(this._context);
@@ -103,7 +116,7 @@ export class SearchBar extends common.SearchBar {
         this._android.setIconified(false);
 
         var that = new WeakRef(this);
-        this._android.setOnQueryTextListener(new android.widget.SearchView.OnQueryTextListener({
+        this._android.setOnQueryTextListener(new android.widget.SearchView.OnQueryTextListener(<utils.Owned & android.widget.SearchView.IOnQueryTextListener>{
             get owner() {
                 return that.get();
             },
@@ -134,7 +147,7 @@ export class SearchBar extends common.SearchBar {
             }
         }));
 
-        this._android.setOnCloseListener(new android.widget.SearchView.OnCloseListener({
+        this._android.setOnCloseListener(new android.widget.SearchView.OnCloseListener(<utils.Owned & android.widget.SearchView.IOnCloseListener>{
             get owner() {
                 return that.get();
             },

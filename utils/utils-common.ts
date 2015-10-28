@@ -20,6 +20,15 @@ export function copyFrom(source: any, target: any) {
     }
 }
 
+export function parseJSON(source: string): any {
+    var src = source.trim();
+    if (src.lastIndexOf(")") === src.length - 1) {
+        return JSON.parse(src.substring(src.indexOf("(") + 1, src.lastIndexOf(")")));
+    }
+
+    return JSON.parse(src);
+}
+
 export module layout {
 
     var MODE_SHIFT = 30;
@@ -31,6 +40,7 @@ export module layout {
 
     export var MEASURED_STATE_TOO_SMALL = 0x01000000;
     export var MEASURED_STATE_MASK = 0xff000000;
+    export var MEASURED_SIZE_MASK = 0x00ffffff;
 
     export function getMode(mode: number): string {
         switch (mode) {
@@ -38,6 +48,7 @@ export module layout {
                 return "Exact";
 
             case layout.AT_MOST:
+
                 return "AtMost";
 
             default:

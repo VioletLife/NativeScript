@@ -1,14 +1,14 @@
-﻿import common = require("ui/editable-text-base/editable-text-base-common");
+﻿import common = require("./editable-text-base-common");
 import textBase = require("ui/text-base");
 import dependencyObservable = require("ui/core/dependency-observable");
 import enums = require("ui/enums");
+import utils = require("utils/utils");
 
 export class EditableTextBase extends common.EditableTextBase {
     private _android: android.widget.EditText;
     /* tslint:disable */
     private _dirtyTextAccumulator: string;
     /* tslint:enable */
-    private _imm: android.view.inputmethod.InputMethodManager;
 
     constructor(options?: textBase.Options) {
         super(options);
@@ -18,9 +18,7 @@ export class EditableTextBase extends common.EditableTextBase {
         return this._android;
     }
 
-    public _createUI() {
-        this._imm = <android.view.inputmethod.InputMethodManager>this._context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
-        
+    public _createUI() {      
         this._android = new android.widget.EditText(this._context);
         this._configureEditText();
         this.android.setTag(this.android.getKeyListener());
@@ -81,8 +79,10 @@ export class EditableTextBase extends common.EditableTextBase {
                     if (actionId === android.view.inputmethod.EditorInfo.IME_ACTION_DONE ||
                         actionId === android.view.inputmethod.EditorInfo.IME_ACTION_GO ||
                         actionId === android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
-                        actionId === android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
+                        actionId === android.view.inputmethod.EditorInfo.IME_ACTION_SEND ||
+                        actionId === android.view.inputmethod.EditorInfo.IME_ACTION_NEXT) {
                         owner.dismissSoftInput();
+                        owner._onReturnPress();
                     }
                 }
 
@@ -96,24 +96,25 @@ export class EditableTextBase extends common.EditableTextBase {
         // abstract
     }
 
+    public _onReturnPress() {
+        // abstract
+    }
+
     public _onDetached(force?: boolean) {
-        this._imm = undefined;
         this._android = undefined;
 
         super._onDetached(force);
     }
 
     public dismissSoftInput() {
-        if (this._imm) {
-            this._imm.hideSoftInputFromWindow(this._android.getWindowToken(), 0);
-        }
+        utils.ad.dismissSoftInput(this._nativeView);
     }
 
     public focus(): boolean {
         var result = super.focus();
         
-        if (result && this._nativeView) {
-            this._imm.showSoftInput(this._nativeView, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        if (result) {
+            utils.ad.showSoftInput(this._nativeView);
         }
         
         return result;
@@ -205,20 +206,20 @@ export class EditableTextBase extends common.EditableTextBase {
         }
 
         var inputType = editableTextBase.android.getInputType();
-        inputType = inputType & ~28762; //28762 (0x00007000) 13,14,15bits
+        inputType = inputType & ~28672; //28672 (0x00070000) 13,14,15bits (111 0000 0000 0000)
 
         switch (data.newValue) {
             case enums.AutocapitalizationType.none:
                 //Do nothing, we have lowered the three bits above.
                 break;
             case enums.AutocapitalizationType.words:
-                inputType = inputType | android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS; //8192 (0x00002000) 14th bit
+                inputType = inputType | android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS; //8192 (0x00020000) 14th bit
                 break;
             case enums.AutocapitalizationType.sentences:
-                inputType = inputType | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES; //16384(0x00004000) 15th bit
+                inputType = inputType | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES; //16384(0x00040000) 15th bit
                 break;
             case enums.AutocapitalizationType.allCharacters:
-                inputType = inputType | android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS; //4096 (0x00001000) 13th bit
+                inputType = inputType | android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS; //4096 (0x00010000) 13th bit
                 break;
             default:
                 inputType = inputType | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES;
@@ -260,6 +261,6 @@ export class EditableTextBase extends common.EditableTextBase {
             return;
         }
 
-        editableTextBase.android.setHint(data.newValue);
+        editableTextBase.android.setHint(data.newValue + "");
     }
 }  

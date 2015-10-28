@@ -5,6 +5,7 @@ declare module "ui/core/view" {
     import gestures = require("ui/gestures");
     import color = require("color");
     import observable = require("data/observable");
+    import animation = require("ui/animation");
 
     /**
      * Gets a child view by id.
@@ -24,10 +25,12 @@ declare module "ui/core/view" {
     /**
      * Gets an ancestor from a given type.
      * @param view - Starting view (child view).
-     * @param typeName - The type name of the parent container which is looking for.
+     * @param criterion - The type of ancestor view we are looking for. Could be a string containing a class name or an actual type.
      * Returns an instance of a view (if found), otherwise undefined.
      */
-    export function getAncestor(view: View, typeName: string): View;
+    export function getAncestor(view: View, criterion: string | Function): View;
+
+    export function isEventOrGesture(name: string, view: View): boolean;
 
     /**
      * Defines interface for an optional parameter used to create a view.
@@ -81,9 +84,14 @@ declare module "ui/core/view" {
          */
         visibility?: string;
         /**
-         * Gets or sets the CSS class of this view.
+         * [Deprecated. Please use className instead] Gets or sets the CSS class of this view.
          */
         cssClass?: string;
+
+        /**
+         * Gets or sets the CSS class name of this view.
+         */
+        className?: string;
         /**
          * Gets or sets the id of this view.
          */
@@ -126,9 +134,14 @@ declare module "ui/core/view" {
         public static idProperty: dependencyObservable.Property;
 
         /**
-         * Represents the observable property backing the cssClass property of each View.
+         * [Deprecated. Please use className instead.] Represents the observable property backing the cssClass property of each View.
          */
         public static cssClassProperty: dependencyObservable.Property;
+
+        /**
+         * Represents the observable property backing the className property of each View.
+         */
+        public static classNameProperty: dependencyObservable.Property;
 
         /**
          * Represents the observable property backing the isEnabled property of each View.
@@ -205,31 +218,6 @@ declare module "ui/core/view" {
         marginBottom: number;
 
         /**
-         * Gets or sets padding style property.
-         */
-        padding: string;
-
-        /**
-         * Specify the left padding of this view.
-         */
-        paddingLeft: number;
-
-        /**
-         * Specify the top padding of this view.
-         */
-        paddingTop: number;
-
-        /**
-         * Specify the right padding of this view.
-         */
-        paddingRight: number;
-
-        /**
-         * Specify the bottom padding of this view.
-         */
-        paddingBottom: number;
-
-        /**
          * Gets or sets the alignment of this view within its parent along the Horizontal axis.
          */
         horizontalAlignment: string;
@@ -252,6 +240,31 @@ declare module "ui/core/view" {
         //----------Style property shortcuts----------
 
         /**
+         * Gets or sets the translateX affine transform of the view.
+         */
+        translateX: number;
+
+        /**
+         * Gets or sets the translateY affine transform of the view.
+         */
+        translateY: number;
+
+        /**
+         * Gets or sets the scaleX affine transform of the view.
+         */
+        scaleX: number;
+
+        /**
+         * Gets or sets the scaleY affine transform of the view.
+         */
+        scaleY: number;
+
+        /**
+         * Gets or sets the rotate affine transform of the view.
+         */
+        rotate: number;
+
+        /**
          * Gets or sets a value indicating whether the the view is enabled. This affects the appearance of the view.
          */
         isEnabled: boolean;
@@ -267,9 +280,14 @@ declare module "ui/core/view" {
         id: string;
 
         /**
-         * Gets or sets the CSS class for this view.
+         * [Deprecated. Please use className instead.] Gets or sets the CSS class for this view.
          */
         cssClass: string;
+
+        /**
+         * Gets or sets the CSS class name for this view.
+         */
+        className: string;
 
         /**
          * Gets the style object associated to this view.
@@ -282,13 +300,18 @@ declare module "ui/core/view" {
         parent: View;
 
         /**
-         * Gets is layout is valid. This is read-only property.
+         * Gets is layout is valid. This is a read-only property.
          */
         isLayoutValid: boolean;
 
         cssType: string;
 
         visualState: string;
+
+        /**
+         * Gets owner page. This is a read-only property.
+         */
+        page: View;
 
         /**
          * This is called to find out how big a view should be. The parent supplies constraint information in the width and height parameters.
@@ -375,10 +398,16 @@ declare module "ui/core/view" {
          */
         public focus(): boolean;
 
+        /**
+         * Sets in-line CSS string as style.
+         * @param style - In-line CSS string. 
+         */
+        public setInlineStyle(style: string) : void;
+
         public getGestureObservers(type: gestures.GestureTypes): Array<gestures.GesturesObserver>;
 
         /**
-         * Adds a gesture observer.
+         * [Deprecated. Please use the on() instead.] Adds a gesture observer.
          * @param type - Type of the gesture.
          * @param callback - A function that will be executed when gesture is received.
          * @param thisArg - An optional parameter which will be used as `this` context for callback execution. 
@@ -387,11 +416,19 @@ declare module "ui/core/view" {
 
         /**
          * A basic method signature to hook an event listener (shortcut alias to the addEventListener method).
-         * @param eventNames - String corresponding to events (e.g. "propertyChange"). Optionally could be used more events separated by `,` (e.g. "propertyChange", "change"). 
+         * @param eventNames - String corresponding to events (e.g. "propertyChange"). Optionally could be used more events separated by `,` (e.g. "propertyChange", "change") or you can use gesture types. 
          * @param callback - Callback function which will be executed when event is raised.
          * @param thisArg - An optional parameter which will be used as `this` context for callback execution.
          */
-        on(eventNames: string, callback: (data: observable.EventData) => void, thisArg?: any);
+        on(eventNames: string | gestures.GestureTypes, callback: (data: observable.EventData) => void, thisArg?: any);
+        
+        /**
+         * Removes listener(s) for the specified event name.
+         * @param eventNames Comma delimited names of the events or gesture types the specified listener is associated with.
+         * @param callback An optional parameter pointing to a specific listener. If not defined, all listeners for the event names will be removed.
+         * @param thisArg An optional parameter which when set will be used to refine search of the correct callback which will be removed as event listener.
+         */
+        off(eventNames: string | gestures.GestureTypes, callback?: any, thisArg?: any);
 
         /**
          * Raised when a loaded event occurs.
@@ -403,12 +440,15 @@ declare module "ui/core/view" {
          */
         on(event: "unloaded", callback: (args: observable.EventData) => void, thisArg?: any);
 
+        public animate(options: animation.AnimationDefinition): Promise<void>;
+        public createAnimation(options: animation.AnimationDefinition): animation.Animation;
+
         // Lifecycle events
         onLoaded(): void;
         onUnloaded(): void;
         isLoaded: boolean;
 
-        _addView(view: View);
+        _addView(view: View, atIndex?: number);
         _propagateInheritableProperties(view: View)
         _inheritProperties(parentView: View)
         _removeView(view: View);
@@ -418,7 +458,7 @@ declare module "ui/core/view" {
 
         // TODO: Implement logic for stripping these lines out
         //@private
-        _gestureObservers: Map<number, Array<gestures.GesturesObserver>>;
+        _gestureObservers: any;
         _isInheritedChange(): boolean;
         _domId: number;
         _cssClasses: Array<string>;
@@ -428,7 +468,7 @@ declare module "ui/core/view" {
         /**
          * Performs the core logic of adding a child view to the native visual tree. Returns true if the view's native representation has been successfully added, false otherwise.
          */
-        _addViewToNativeVisualTree(view: View): boolean;
+        _addViewToNativeVisualTree(view: View, atIndex?: number): boolean;
         _removeViewFromNativeVisualTree(view: View): void;
 
         _eachChildView(callback: (child: View) => boolean);
@@ -439,24 +479,18 @@ declare module "ui/core/view" {
         _onDetached(force?: boolean): void;
         _createUI(): void;
 
-        _prepareNativeView(view: UIView);
-
+        _shouldApplyStyleHandlers();
         _checkMetadataOnPropertyChanged(metadata: dependencyObservable.PropertyMetadata);
 
         _updateLayout(): void;
 
         /**
-         * Called my measure method to cache measureSpecs.
+         * Called by measure method to cache measureSpecs.
          */
         _setCurrentMeasureSpecs(widthMeasureSpec: number, heightMeasureSpec: number): boolean;
 
         /**
-         * Returns view measureSpecs.
-         */
-        _getCurrentMeasureSpecs(): { widthMeasureSpec: number; heightMeasureSpec: number };
-
-        /**
-         * Called my layout method to cache view bounds.
+         * Called by layout method to cache view bounds.
          */
         _setCurrentLayoutBounds(left: number, top: number, right: number, bottom: number): void;
 
@@ -502,7 +536,7 @@ declare module "ui/core/view" {
     interface AddChildFromBuilder {
         /**
          * Called for every child element declared in xml.
-         * This function will create an instance of declared child element.
+         * This method will add a child element (value) to current element.
          * @param name - Name of the element.
          * @param value - Value of the element.
          */
@@ -521,4 +555,5 @@ declare module "ui/core/view" {
          */
         _applyXmlAttribute(attributeName: string, attrValue: any): boolean;
     }
+
 }

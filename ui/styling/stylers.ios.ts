@@ -1,14 +1,14 @@
 ﻿import view = require("ui/core/view");
-import style = require("ui/styling/style");
+import style = require("./style");
 import definition = require("ui/styling");
-import stylersCommon = require("ui/styling/stylers-common");
+import stylersCommon = require("./stylers-common");
 import enums = require("ui/enums");
 import font = require("ui/styling/font");
 import background = require("ui/styling/background");
+import frame = require("ui/frame");
+import tabView = require("ui/tab-view");
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(stylersCommon, exports);
+global.moduleMerge(stylersCommon, exports);
 
 interface TextUIView {
     font: UIFont;
@@ -84,7 +84,7 @@ export class DefaultStyler implements definition.stylers.Styler {
     }
 
     private static getBorderWidthProperty(view: view.View): any {
-        if (view._nativeView instanceof UIView){
+        if (view._nativeView instanceof UIView) {
             return (<UIView>view._nativeView).layer.borderWidth;
         }
         return 0;
@@ -114,6 +114,7 @@ export class DefaultStyler implements definition.stylers.Styler {
     private static setBorderRadiusProperty(view: view.View, newValue: any) {
         if (view._nativeView instanceof UIView) {
             (<UIView>view._nativeView).layer.cornerRadius = newValue;
+            (<UIView>view._nativeView).clipsToBounds = true;
         }
     }
 
@@ -229,6 +230,19 @@ export class ButtonStyler implements definition.stylers.Styler {
         }
     }
 
+    // Padding
+    private static setPaddingProperty(view: view.View, newValue: any) {
+        var top = newValue.top + view.borderWidth;
+        var left = newValue.left + view.borderWidth;
+        var bottom = newValue.bottom + view.borderWidth;
+        var right = newValue.right + view.borderWidth;
+        (<UIButton>view._nativeView).contentEdgeInsets = UIEdgeInsetsFromString(`{${top},${left},${bottom},${right}}`);
+    }
+
+    private static resetPaddingProperty(view: view.View, nativeValue: any) {
+        (<UIButton>view._nativeView).contentEdgeInsets = UIEdgeInsetsFromString("{0,0,0,0}");
+    }
+
     public static registerHandlers() {
         style.registerHandler(style.colorProperty, new stylersCommon.StylePropertyChangedHandler(
             ButtonStyler.setColorProperty,
@@ -244,6 +258,10 @@ export class ButtonStyler implements definition.stylers.Styler {
             ButtonStyler.setTextAlignmentProperty,
             ButtonStyler.resetTextAlignmentProperty,
             ButtonStyler.getNativeTextAlignmentValue), "Button");
+
+        style.registerHandler(style.nativePaddingsProperty, new stylersCommon.StylePropertyChangedHandler(
+            ButtonStyler.setPaddingProperty,
+            ButtonStyler.resetPaddingProperty), "Button");
     }
 }
 
@@ -376,6 +394,98 @@ export class SegmentedBarStyler implements definition.stylers.Styler {
     }
 }
 
+export class ProgressStyler implements definition.stylers.Styler {
+    //Text color methods
+    private static setColorProperty(view: view.View, newValue: any) {
+        var bar = <UIProgressView>view.ios;
+        bar.progressTintColor = newValue;
+    }
+
+    private static resetColorProperty(view: view.View, nativeValue: any) {
+        var bar = <UIProgressView>view.ios;
+        bar.progressTintColor = nativeValue;
+    }
+
+    private static getNativeColorValue(view: view.View): any {
+        var bar = <UIProgressView>view.ios;
+        return bar.progressTintColor;
+    }
+
+    private static setBackgroundColorProperty(view: view.View, newValue: any) {
+        var bar = <UIProgressView>view.ios;
+        bar.trackTintColor = newValue;
+    }
+
+    private static resetBackgroundColorProperty(view: view.View, nativeValue: any) {
+        var bar = <UIProgressView>view.ios;
+        bar.trackTintColor = nativeValue;
+    }
+
+    private static getBackgroundColorProperty(view: view.View): any {
+        var bar = <UIProgressView>view.ios;
+        return bar.trackTintColor;
+    }
+
+    public static registerHandlers() {
+        style.registerHandler(style.colorProperty, new stylersCommon.StylePropertyChangedHandler(
+            ProgressStyler.setColorProperty,
+            ProgressStyler.resetColorProperty,
+            ProgressStyler.getNativeColorValue), "Progress");
+
+        style.registerHandler(style.backgroundColorProperty, new stylersCommon.StylePropertyChangedHandler(
+            ProgressStyler.setBackgroundColorProperty,
+            ProgressStyler.resetBackgroundColorProperty,
+            ProgressStyler.getBackgroundColorProperty), "Progress");
+    }
+}
+
+export class SwitchStyler implements definition.stylers.Styler {
+    private static setColorProperty(view: view.View, newValue: any) {
+        var sw = <UISwitch>view.ios;
+        sw.thumbTintColor = newValue;
+    }
+
+    private static resetColorProperty(view: view.View, nativeValue: any) {
+        var sw = <UISwitch>view.ios;
+        sw.thumbTintColor = nativeValue;
+    }
+
+    private static getNativeColorValue(view: view.View): any {
+        var sw = <UISwitch>view.ios;
+        return sw.thumbTintColor;
+    }
+
+    private static setBackgroundColorProperty(view: view.View, newValue: any) {
+        var sw = <UISwitch>view.ios;
+        sw.onTintColor = view.backgroundColor.ios;
+    }
+
+    private static resetBackgroundColorProperty(view: view.View, nativeValue: any) {
+        var sw = <UISwitch>view.ios;
+        sw.onTintColor = nativeValue;
+    }
+
+    private static getBackgroundColorProperty(view: view.View): any {
+        var sw = <UISwitch>view.ios;
+        return sw.onTintColor;
+    }
+
+    public static registerHandlers() {
+        style.registerHandler(style.colorProperty, new stylersCommon.StylePropertyChangedHandler(
+            SwitchStyler.setColorProperty,
+            SwitchStyler.resetColorProperty,
+            SwitchStyler.getNativeColorValue), "Switch");
+
+        var bkgHandler = new stylersCommon.StylePropertyChangedHandler(
+            SwitchStyler.setBackgroundColorProperty,
+            SwitchStyler.resetBackgroundColorProperty,
+            SwitchStyler.getBackgroundColorProperty);
+
+        style.registerHandler(style.backgroundColorProperty, bkgHandler, "Switch");
+        style.registerHandler(style.backgroundInternalProperty, bkgHandler, "Switch");
+    }
+}
+
 export class SearchBarStyler implements definition.stylers.Styler {
 
     private static setBackgroundColorProperty(view: view.View, newValue: any) {
@@ -394,9 +504,7 @@ export class SearchBarStyler implements definition.stylers.Styler {
     }
 
     private static getColorProperty(view: view.View): any {
-        var bar = <UISearchBar>view.ios;
-
-        var sf = <UITextField>bar.valueForKey("_searchField");
+        var sf = <UITextField>(<any>view)._textField;
         if (sf) {
             return sf.textColor;
         }
@@ -405,21 +513,41 @@ export class SearchBarStyler implements definition.stylers.Styler {
     }
 
     private static setColorProperty(view: view.View, newValue: any) {
-        var bar = <UISearchBar>view.ios;
-
-        var sf = <UITextField>bar.valueForKey("_searchField");
+        var sf = <UITextField>(<any>view)._textField;
         if (sf) {
             sf.textColor = newValue;
         }
     }
 
     private static resetColorProperty(view: view.View, nativeValue: any) {
-        var bar = <UISearchBar>view.ios;
-
-        var sf = <UITextField>bar.valueForKey("_searchField");
+        var sf = <UITextField>(<any>view)._textField;
         if (sf) {
             sf.textColor = nativeValue;
         }
+    }
+
+    // font
+    private static setFontInternalProperty(view: view.View, newValue: any, nativeValue: any) {
+        var sf = <UITextField>(<any>view)._textField;
+        if (sf) {
+            sf.font = (<font.Font>newValue).getUIFont(nativeValue);
+        }
+    }
+
+    private static resetFontInternalProperty(view: view.View, nativeValue: any) {
+        var sf = <UITextField>(<any>view)._textField;
+        if (sf) {
+            sf.font = nativeValue;
+        }
+    }
+
+    private static getNativeFontInternalValue(view: view.View): any {
+        var sf = <UITextField>(<any>view)._textField;
+        if (sf) {
+            return sf.font;
+        }
+
+        return undefined;
     }
 
     public static registerHandlers() {
@@ -432,6 +560,55 @@ export class SearchBarStyler implements definition.stylers.Styler {
             SearchBarStyler.setColorProperty,
             SearchBarStyler.resetColorProperty,
             SearchBarStyler.getColorProperty), "SearchBar");
+
+        style.registerHandler(style.fontInternalProperty, new stylersCommon.StylePropertyChangedHandler(
+            SearchBarStyler.setFontInternalProperty,
+            SearchBarStyler.resetFontInternalProperty,
+            SearchBarStyler.getNativeFontInternalValue), "SearchBar");
+    }
+}
+
+export class ActionBarStyler implements definition.stylers.Styler {
+    // color
+    private static setColorProperty(view: view.View, newValue: any) {
+        var topFrame = frame.topmost();
+        if (topFrame) {
+            var bar = topFrame.ios.controller.navigationBar;
+            (<any>bar).titleTextAttributes = { [NSForegroundColorAttributeName]: newValue };
+        }
+    }
+
+    private static resetColorProperty(view: view.View, nativeValue: any) {
+        var topFrame = frame.topmost();
+        if (topFrame) {
+            var bar = topFrame.ios.controller.navigationBar;
+            (<any>bar).titleTextAttributes = null;
+        }
+    }
+
+    public static registerHandlers() {
+        style.registerHandler(style.colorProperty, new stylersCommon.StylePropertyChangedHandler(
+            ActionBarStyler.setColorProperty,
+            ActionBarStyler.resetColorProperty), "ActionBar");
+    }
+}
+
+export class TabViewStyler implements definition.stylers.Styler {
+    // color
+    private static setColorProperty(view: view.View, newValue: any) {
+        var tab = <tabView.TabView>view;
+        tab._updateIOSTabBarColors();
+    }
+
+    private static resetColorProperty(view: view.View, nativeValue: any) {
+        var tab = <tabView.TabView>view;
+        tab._updateIOSTabBarColors();
+    }
+
+    public static registerHandlers() {
+        style.registerHandler(style.colorProperty, new stylersCommon.StylePropertyChangedHandler(
+            TabViewStyler.setColorProperty,
+            TabViewStyler.resetColorProperty), "TabView");
     }
 }
 
@@ -460,4 +637,8 @@ export function _registerDefaultStylers() {
     TextViewStyler.registerHandlers();
     SegmentedBarStyler.registerHandlers();
     SearchBarStyler.registerHandlers();
+    ActionBarStyler.registerHandlers();
+    TabViewStyler.registerHandlers();
+    ProgressStyler.registerHandlers();
+    SwitchStyler.registerHandlers();
 }

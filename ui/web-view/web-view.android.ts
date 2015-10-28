@@ -1,10 +1,8 @@
-﻿import common = require("ui/web-view/web-view-common");
+﻿import common = require("./web-view-common");
 import trace = require("trace");
-import utils = require("utils/utils");
 import fs = require("file-system");
 
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 class WebViewClientClass extends android.webkit.WebViewClient {
     private _view: common.WebView;
@@ -71,38 +69,49 @@ export class WebView extends common.WebView {
     }
 
     public _loadUrl(url: string) {
+        if (!this._android) {
+            return;
+        }
+
         trace.write("WebView._loadUrl(" + url + ")", trace.categories.Debug);
         this._android.stopLoading();
         this._android.loadUrl(url);
     }
 
-    public _loadSrc(src: string) {
-        trace.write("WebView._loadSrc(" + src + ")", trace.categories.Debug);
-
-        this._android.stopLoading();
-        this._android.loadUrl("about:blank");
-
-        if (utils.isFileOrResourcePath(src)) {
-
-            if (src.indexOf("~/") === 0) {
-                src = fs.path.join(fs.knownFolders.currentApp().path, src.replace("~/", ""));
-            }
-
-            var file = fs.File.fromPath(src);
-            if (file) {
-                file.readText().then((r) => {
-                    this._android.loadData(r, "text/html", null);
-                });
-            }
-        } else if (src.indexOf("http://") === 0 || src.indexOf("https://") === 0) {
-            this._android.loadUrl(src);
-        } else {
-            this._android.loadData(src, "text/html", null);
+    public _loadFileOrResource(path: string, content: string) {
+        if (!this._android) {
+            return;
         }
+
+        var baseUrl = `file:///${path.substring(0, path.lastIndexOf('/') + 1) }`;
+        this._android.loadDataWithBaseURL(baseUrl, content, "text/html; charset=utf-8", "utf-8", null);
+    }
+
+    public _loadHttp(src: string) {
+        if (!this._android) {
+            return;
+        }
+
+        this._android.loadUrl(src);
+    }
+
+    public _loadData(src: string) {
+        if (!this._android) {
+            return;
+        }
+
+        var baseUrl = `file:///${fs.knownFolders.currentApp().path}/`;
+        this._android.loadDataWithBaseURL(baseUrl, src, "text/html; charset=utf-8", "utf-8", null);
     }
 
     get canGoBack(): boolean {
         return this._android.canGoBack();
+    }
+
+    public stopLoading() {
+        if (this._android) {
+            this._android.stopLoading();
+        }
     }
 
     get canGoForward(): boolean {

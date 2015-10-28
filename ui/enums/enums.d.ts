@@ -105,6 +105,24 @@
     }
 
     /**
+     * Orientation of a device.
+     */
+    module DeviceOrientation {
+        /**
+         * Portrait orientation.
+         */
+        export var portrait: string;
+        /**
+         * Landscape orientation.
+         */
+        export var landscape: string;
+        /**
+         * Orientation cannot be determined.
+         */
+        export var unknown: string;
+    }
+
+    /**
      * HorizontalAlignment indicates where an element should be displayed on the horizontal axis relative to the allocated layout slot of the parent element.
      */
     module HorizontalAlignment {
@@ -142,6 +160,11 @@
          * An element should be center aligned.
          */
         export var center: string;
+
+        /**
+         * Same as center. An element should be aligned in the middle.
+         */
+        export var middle: string;
 
         /**
          * An element should be bottom aligned.

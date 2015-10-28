@@ -5,6 +5,8 @@ import stackModule = require("ui/layouts/stack-layout");
 import page = require("ui/page");
 import color = require("color");
 import observable = require("data/observable");
+import enums = require("ui/enums");
+import fontModule = require("ui/styling/font");
 
 var testBtn: buttonModule.Button;
 var testPage: page.Page;
@@ -23,8 +25,8 @@ export function setUpModule() {
 
 export function tearDownModule() {
     helper.goBack();
-    delete testBtn;
-    delete testPage;
+    testBtn = null;
+    testPage = null;
 }
 
 export function tearDown() {
@@ -89,8 +91,11 @@ export function test_setting_minHeight_property_from_CSS_is_applied_to_Style() {
 }
 
 export function test_setting_verticalAlignment_property_from_CSS_is_applied_to_Style() {
-
     test_property_from_CSS_is_applied_to_style("verticalAlignment", "vertical-align", "bottom");
+}
+
+export function test_setting_verticalAlignment_middle_is_applied_to_Style() {
+    test_property_from_CSS_is_applied_to_style("verticalAlignment", "vertical-align", "middle");
 }
 
 export function test_setting_horizontalAlignment_property_from_CSS_is_applied_to_Style() {
@@ -316,4 +321,48 @@ function test_font_shorthand_property(short: string, family: string, size: numbe
     TKUnit.assertEqual(testView.style.fontStyle, style, "style.fontStyle");
     TKUnit.assertEqual(testView.style.fontWeight, weight, "style.fontWeight");
     TKUnit.assertEqual(testView.style.fontSize, size, "style.fontSize");
+}
+
+export function test_setting_font_properties_sets_native_font() {
+
+    if (fontModule.ios) {
+        var basePath = "fonts";
+        fontModule.ios.registerFont(basePath + "/Roboto-Regular.ttf");
+        fontModule.ios.registerFont(basePath + "/Roboto-Bold.ttf");
+        fontModule.ios.registerFont(basePath + "/Roboto-BoldItalic.ttf");
+        fontModule.ios.registerFont(basePath + "/Roboto-Italic.ttf");
+    }
+
+    test_native_font(enums.FontStyle.normal, enums.FontWeight.normal);
+    test_native_font(enums.FontStyle.italic, enums.FontWeight.normal);
+    test_native_font(enums.FontStyle.normal, enums.FontWeight.bold);
+    test_native_font(enums.FontStyle.italic, enums.FontWeight.bold);
+}
+
+function test_native_font(style: string, weight: string) {
+    var testView = new buttonModule.Button();
+    var fontName = "Roboto";
+    var fontNameSuffix = "";
+
+    testView.style.fontFamily = fontName;
+    testView.style.fontWeight = weight;
+    testView.style.fontStyle = style;
+
+    if (style === enums.FontStyle.normal && weight === enums.FontWeight.normal)
+    {
+        fontNameSuffix += "Regular";
+    }
+    if (weight === enums.FontWeight.bold)
+    {
+        fontNameSuffix += "Bold";
+    }
+    if (style === enums.FontStyle.italic)
+    {
+        fontNameSuffix += "Italic";
+    }
+
+    if (testView.ios) {
+        TKUnit.assertEqual((<UIButton>testView.ios).titleLabel.font.fontName.toLowerCase(), (fontName + "-" + fontNameSuffix).toLowerCase(), "native font " + weight + " " + style);
+    }
+    //TODO: If needed add tests for other platforms
 }

@@ -1,12 +1,10 @@
-﻿import common = require("ui/gestures/gestures-common");
+﻿import common = require("./gestures-common");
 import definition = require("ui/gestures");
 import observable = require("data/observable");
 import view = require("ui/core/view");
 import trace = require("trace");
 
-// merge the exports of the request file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 var SWIPE_THRESHOLD = 100;
 var SWIPE_VELOCITY_THRESHOLD = 100;
@@ -30,7 +28,7 @@ export class GesturesObserver extends common.GesturesObserver {
             };
             this._onTargetUnloaded = args => {
                 trace.write(this.target + ".target unloaded. android:" + this.target._nativeView, "gestures");
-                this._dettach();
+                this._detach();
             };
 
             this.target.on(view.View.loadedEvent, this._onTargetLoaded);
@@ -43,7 +41,7 @@ export class GesturesObserver extends common.GesturesObserver {
     }
 
     public disconnect() {
-        this._dettach();
+        this._detach();
 
         if (this.target) {
             this.target.off(view.View.loadedEvent, this._onTargetLoaded);
@@ -56,7 +54,7 @@ export class GesturesObserver extends common.GesturesObserver {
         super.disconnect();
     }
 
-    private _dettach() {
+    private _detach() {
         trace.write(this.target + "._detach() android:" + this.target._nativeView, "gestures");
 
         this._onTouchListener = null;
@@ -68,7 +66,7 @@ export class GesturesObserver extends common.GesturesObserver {
 
     private _attach(target: view.View, type: definition.GestureTypes) {
         trace.write(this.target + "._attach() android:" + this.target._nativeView, "gestures");
-        this._dettach();
+        this._detach();
 
         if (type & definition.GestureTypes.tap || type & definition.GestureTypes.doubleTap || type & definition.GestureTypes.longPress) {
             this._simpleGestureDetector = new android.support.v4.view.GestureDetectorCompat(target._context, new TapAndDoubleTapGestureListener(this, this.target, type));
@@ -116,7 +114,9 @@ export class GesturesObserver extends common.GesturesObserver {
                 view: this.target,
                 android: motionEvent,
                 rotation: degrees,
-                ios: null
+                ios: undefined,
+                object: this.target,
+                eventName: definition.toString(definition.GestureTypes.rotation)
             }
 
             //var observer = that.get();
@@ -132,7 +132,10 @@ function _getArgs(type: definition.GestureTypes, view: view.View, e: android.vie
     return <definition.GestureEventData>{
         type: type,
         view: view,
-        android: e
+        android: e,
+        ios: undefined,
+        object: view,
+        eventName: definition.toString(type),
     };
 }
 
@@ -142,7 +145,10 @@ function _getSwipeArgs(direction: definition.SwipeDirection, view: view.View,
         type: definition.GestureTypes.swipe,
         view: view,
         android: { initial: initialEvent, current: currentEvent },
-        direction: direction
+        direction: direction,
+        ios: undefined,
+        object: view,
+        eventName: definition.toString(definition.GestureTypes.swipe),
     };
 }
 
@@ -153,7 +159,10 @@ function _getPanArgs(deltaX: number, deltaY: number, view: view.View,
         view: view,
         android: { initial: initialEvent, current: currentEvent },
         deltaX: deltaX,
-        deltaY: deltaY
+        deltaY: deltaY,
+        ios: undefined,
+        object: view,
+        eventName: definition.toString(definition.GestureTypes.pan),
     };
 }
 
@@ -177,8 +186,8 @@ class TapAndDoubleTapGestureListener extends android.view.GestureDetector.Simple
         return global.__native(this);
     }
 
-    public onSingleTapConfirmed(motionEvent: android.view.MotionEvent): boolean {
-        if (this._type === definition.GestureTypes.tap) {
+    public onSingleTapUp(motionEvent: android.view.MotionEvent): boolean {
+        if (this._type & definition.GestureTypes.tap) {
             var args = _getArgs(definition.GestureTypes.tap, this._target, motionEvent);
             _executeCallback(this._observer, args);
         }
@@ -186,7 +195,7 @@ class TapAndDoubleTapGestureListener extends android.view.GestureDetector.Simple
     }
 
     public onDoubleTap(motionEvent: android.view.MotionEvent): boolean {
-        if (this._type === definition.GestureTypes.doubleTap) {
+        if (this._type & definition.GestureTypes.doubleTap) {
             var args = _getArgs(definition.GestureTypes.doubleTap, this._target, motionEvent);
             _executeCallback(this._observer, args);
         }
@@ -197,12 +206,11 @@ class TapAndDoubleTapGestureListener extends android.view.GestureDetector.Simple
         return true;
     }
 
-    public onLongPress(motionEvent: android.view.MotionEvent): boolean {
-        if (this._type === definition.GestureTypes.longPress) {
+    public onLongPress(motionEvent: android.view.MotionEvent): void {
+        if (this._type & definition.GestureTypes.longPress) {
             var args = _getArgs(definition.GestureTypes.longPress, this._target, motionEvent);
             _executeCallback(this._observer, args);
         }
-        return true;
     }
 }
 
@@ -224,7 +232,10 @@ class PinchGestureListener extends android.view.ScaleGestureDetector.SimpleOnSca
             type: definition.GestureTypes.pinch,
             view: this._target,
             android: detector,
-            scale: detector.getScaleFactor()
+            scale: detector.getScaleFactor(),
+            object: this._target,
+            eventName: definition.toString(definition.GestureTypes.pinch),
+            ios: undefined
         };
 
         _executeCallback(this._observer, args);

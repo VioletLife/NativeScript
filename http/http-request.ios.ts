@@ -5,6 +5,7 @@
 import http = require("http");
 import imageSource = require("image-source");
 import types = require("utils/types");
+import utils = require("utils/utils");
 
 var GET = "GET";
 var USER_AGENT_HEADER = "User-Agent";
@@ -35,7 +36,7 @@ export function request(options: http.HttpRequestOptions): Promise<http.HttpResp
             if (types.isString(options.content) || options.content instanceof FormData) {
                 urlRequest.HTTPBody = NSString.alloc().initWithString(options.content.toString()).dataUsingEncoding(4);
             }
-            
+
             if (types.isNumber(options.timeout)) {
                 urlRequest.timeoutInterval = options.timeout / 1000;
             }
@@ -46,22 +47,45 @@ export function request(options: http.HttpRequestOptions): Promise<http.HttpResp
                         reject(new Error(error.localizedDescription));
                     } else {
                         var headers = {};
-                        var headerFields = response.allHeaderFields;
-                        var keys = headerFields.allKeys;
+                        if (response && response.allHeaderFields) {
+                            var headerFields = response.allHeaderFields;
+                            var keys = headerFields.allKeys;
 
-                        for (var i = 0, l = keys.count; i < l; i++) {
-                            var key = keys.objectAtIndex(i);
-                            headers[key] = headerFields.valueForKey(key);
+                            for (var i = 0, l = keys.count; i < l; i++) {
+                                var key = keys.objectAtIndex(i);
+                                headers[key] = headerFields.valueForKey(key);
+                            }
                         }
 
                         resolve({
                             content: {
                                 raw: data,
                                 toString: () => { return NSDataToString(data); },
-                                toJSON: () => { return JSON.parse(NSDataToString(data)); },
+                                toJSON: () => {
+                                    return utils.parseJSON(NSDataToString(data));
+                                },
                                 toImage: () => {
-                                    return new Promise<imageSource.ImageSource>((resolveImage, reject) => {
-                                        resolveImage(imageSource.fromData(data));
+                                    if (UIImage.imageWithData["async"]) {
+                                        return UIImage.imageWithData["async"](UIImage, [data])
+                                                      .then(image => {
+                                                          if (!image) {
+                                                              throw new Error("Response content may not be converted to an Image");
+                                                          }
+                                    
+                                                          var source = new imageSource.ImageSource();
+                                                          source.setNativeSource(image);
+                                                          return source;
+                                                      });
+                                    }
+   
+                                    return new Promise<imageSource.ImageSource>((resolveImage, rejectImage) => {
+                                        var img = imageSource.fromData(data);
+                                        if (img instanceof imageSource.ImageSource) {
+                                            resolveImage(img);
+                                        } else {
+                                            rejectImage(new Error("Response content may not be converted to an Image"));
+                                        }
+
                                     });
                                 }
                             },

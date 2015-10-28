@@ -1,4 +1,5 @@
 ﻿/* tslint:disable:no-unused-variable */
+
 declare class Request {
     constructor(input: string|Request, init?: RequestInit);
     method: string;
@@ -93,19 +94,8 @@ interface Console {
     log(message: any, ...formatParams: any[]): void;
     trace(): void;
     dump(obj: any): void;
+    createDump(obj: any): string;
     dir(obj: any): void;
-}
-
-interface WeakMap<K, V> {
-    clear(): void;
-    delete(key: K): boolean;
-    get(key: K): V;
-    has(key: K): boolean;
-    set(key: K, value: V): WeakMap<K, V>;
-}
-
-declare var WeakMap: {
-    new <K, V>(): WeakMap<K, V>;
 }
 
 declare var console: Console;

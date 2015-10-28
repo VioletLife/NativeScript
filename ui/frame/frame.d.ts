@@ -88,7 +88,10 @@ declare module "ui/frame" {
         ios: iOSFrame;
 
         //@private
+        navigationBarHeight: number;
         _processNavigationQueue(page: pages.Page);
+        _updateActionBar(page?: pages.Page);
+        _getNavBarVisible(page: pages.Page): boolean;
         //@endprivate
 
         /**
@@ -144,6 +147,17 @@ declare module "ui/frame" {
          * True to navigate to the new Page using animated transitions, false otherwise.
          */
         animated?: boolean;
+
+        /**
+         * True to record the navigation in the backstack, false otherwise. 
+         * If the parameter is set to false then the Page will be displayed but once navigated from it will not be able to be navigated back to.
+         */
+        backstackVisible?: boolean;
+
+        /**
+         * True to clear the navigation history, false otherwise. Very useful when navigating away from login pages.
+         */
+        clearHistory?: boolean;
     }
 
     /**

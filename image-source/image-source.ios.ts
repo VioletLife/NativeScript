@@ -1,12 +1,10 @@
 ﻿import definition = require("image-source");
 import types = require("utils/types");
 import fs = require("file-system");
-import common = require("image-source/image-source-common");
+import common = require("./image-source-common");
 import enums = require("ui/enums");
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 export class ImageSource implements definition.ImageSource {
     public android: android.graphics.Bitmap;

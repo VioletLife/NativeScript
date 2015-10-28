@@ -1,13 +1,25 @@
 ﻿declare module "utils/utils" {
     import colorModule = require("color");
-    import view = require("ui/core/view");
 
     export var RESOURCE_PREFIX: string;
+
+    //@private
+    /**
+     * Used by various android event listener implementations
+     */
+    interface Owned {
+        owner: any;
+    }
+    //@endprivate
 
     /**
      * Utility module related to layout.
      */
     module layout {
+        /**
+         * Bits that provide the actual measured size.
+         */
+        export var MEASURED_SIZE_MASK: number;
         export var MEASURED_STATE_MASK: number;
         export var MEASURED_STATE_TOO_SMALL: number;
         export var UNSPECIFIED: number;
@@ -45,6 +57,31 @@
      */
     module ad {
         /**
+         * Gets the native Android application instance.
+         */
+        export function getApplication(): android.app.Application;
+
+        /**
+         * Gets the Android application context.
+         */
+        export function getApplicationContext(): android.content.Context;
+
+        /**
+         * Gets the native Android input method manager.
+         */
+        export function getInputMethodManager(): android.view.inputmethod.InputMethodManager;
+
+        /**
+         * Hides the soft input method, ususally a soft keyboard.
+         */
+        export function dismissSoftInput(nativeView: android.view.View): void;
+
+        /**
+         * Shows the soft input method, ususally a soft keyboard.
+         */
+        export function showSoftInput(nativeView: android.view.View): void;
+
+        /**
          * Utility module dealing with some android collections.
          */
         module collections {
@@ -74,14 +111,19 @@
              * @param name - Name of the resource.
              */
             export function getStringId(name)
+
             /**
              * Gets the id from a given name.
              * @param name - Name of the resource.
              */
             export function getId(name: string): number;
-        }
 
-        export function async<T>(doInBackground: () => T, callback: (result: T) => void);
+            /**
+             * Gets a color from the current theme.
+             * @param name - Name of the color resource.
+             */
+            export function getPalleteColor(name: string, context: android.content.Context): number;
+        }
     }
     /**
      * Module with ios specific utilities.
@@ -109,11 +151,6 @@
          */
         export function getColor(uiColor: UIColor): colorModule.Color;
         /**
-         * Gets actual height of a [UIView](https://developer.apple.com/library/ios/documentation/UIKit/Reference/UIView_Class/) widget.
-         * @param uiView - An instance of UIView.
-         */
-        export function getActualHeight(uiView: UIView): number;
-        /**
          * Gets an information about if current mode is Landscape.
          */
         export function isLandscape(): boolean;
@@ -121,8 +158,6 @@
          * Gets the iOS device major version (for 8.1 will return 8).
          */
         export var MajorVersion: number;
-
-        export function _layoutRootView(rootView: view.View, parentBounds: CGRect): void;
     }
     /**
      * An utility function that copies properties from source object to target object.
@@ -146,4 +181,16 @@
      * @param uri The URI.
      */
     export function isDataURI(uri: string): boolean
+
+    /**
+     * Returns object from JSON or JSONP string.
+     * @param source The JSON or JSONP string.
+     */
+    export function parseJSON(source: string): any
+
+    /**
+     * Opens url.
+     * @param url The url.
+     */
+    export function openUrl(url: string): boolean
 }

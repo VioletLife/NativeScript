@@ -1,4 +1,4 @@
-﻿import common = require("ui/text-field/text-field-common");
+﻿import common = require("./text-field-common");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
 
@@ -23,7 +23,7 @@ function onSecurePropertyChanged(data: dependencyObservable.PropertyChangeData) 
         }
         
         // Lower all autocapitalization bits, because password bits don't like them and we will receive "Unsupported input type: 16513" error for example.
-        newInputType = newInputType & ~28762; //28762 (0x00007000) 13,14,15bits
+        newInputType = newInputType & ~28672; //28672 (0x0070000) 13,14,15 bits (111 0000 0000 0000)
     }
     else {
         if (currentClass === android.text.InputType.TYPE_CLASS_TEXT) {
@@ -40,9 +40,7 @@ function onSecurePropertyChanged(data: dependencyObservable.PropertyChangeData) 
 // register the setNativeValue callbacks
 (<proxy.PropertyMetadata>common.secureProperty.metadata).onSetNativeValue = onSecurePropertyChanged;
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 export class TextField extends common.TextField {
     public _configureEditText() {
@@ -50,5 +48,9 @@ export class TextField extends common.TextField {
         this.android.setLines(1);
         this.android.setMaxLines(1);
         this.android.setHorizontallyScrolling(true);
+    }
+
+    public _onReturnPress() {
+        this.notify({ eventName: TextField.returnPressEvent, object: this })
     }
 }

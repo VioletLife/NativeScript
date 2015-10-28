@@ -5,7 +5,7 @@ import dependencyObservable = require("ui/core/dependency-observable");
 import enums = require("ui/enums");
 import proxy = require("ui/core/proxy");
 import view = require("ui/core/view");
-import style = require("ui/styling/style");
+import style = require("../styling/style");
 import observable = require("ui/core/dependency-observable");
 
 var ACTION_ITEMS = "actionItems";
@@ -117,14 +117,6 @@ export class ActionBar extends view.View implements dts.ActionBar {
 
     public _onTitlePropertyChanged() {
         //
-    }
-
-    public _updateAndroid(menu: android.view.IMenu) {
-        //
-    }
-
-    public _onAndroidItemSelected(itemId: number): boolean {
-        return false;
     }
 
     public _addArrayFromBuilder(name: string, value: Array<any>) {

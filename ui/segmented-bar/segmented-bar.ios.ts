@@ -1,13 +1,11 @@
 ﻿import definition = require("ui/segmented-bar");
-import common = require("ui/segmented-bar/segmented-bar-common");
+import common = require("./segmented-bar-common");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
 import types = require("utils/types");
 import color = require("color");
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 function onSelectedIndexPropertyChanged(data: dependencyObservable.PropertyChangeData) {
     var view = <SegmentedBar>data.object;
@@ -23,6 +21,9 @@ function onSelectedIndexPropertyChanged(data: dependencyObservable.PropertyChang
             view.selectedIndex = undefined;
             throw new Error("selectedIndex should be between [0, items.length - 1]");
         }
+
+        var args = { eventName: SegmentedBar.selectedIndexChangedEvent, object: view, oldIndex: data.oldValue, newIndex: data.newValue };
+        view.notify(args);
     }
 }
 (<proxy.PropertyMetadata>common.SegmentedBar.selectedIndexProperty.metadata).onSetNativeValue = onSelectedIndexPropertyChanged;
@@ -33,15 +34,20 @@ function onItemsPropertyChanged(data: dependencyObservable.PropertyChangeData) {
         return;
     }
 
-    var newItems = <Array<definition.SegmentedBarItem>>data.newValue;
-
+    var oldItems = <Array<definition.SegmentedBarItem>>data.oldValue;
+    if (oldItems && oldItems.length) {
+        for (var i = 0; i < oldItems.length; i++) {
+            (<SegmentedBarItem>oldItems[i])._parent = null;
+        }
+    }
     view._adjustSelectedIndex(newItems);
-
     view.ios.removeAllSegments();
 
+    var newItems = <Array<definition.SegmentedBarItem>>data.newValue;
     if (newItems && newItems.length) {
         for (var i = 0; i < newItems.length; i++) {
-            view.ios.insertSegmentWithTitleAtIndexAnimated(newItems[i].title, i, false);
+            view.ios.insertSegmentWithTitleAtIndexAnimated(newItems[i].title || "", i, false);
+            (<SegmentedBarItem>newItems[i])._parent = view;
         }
 
         if (view.ios.selectedSegmentIndex !== view.selectedIndex) {
@@ -63,6 +69,15 @@ function onSelectedBackgroundColorPropertyChanged(data: dependencyObservable.Pro
 }
 (<proxy.PropertyMetadata>common.SegmentedBar.selectedBackgroundColorProperty.metadata).onSetNativeValue = onSelectedBackgroundColorPropertyChanged;
 
+export class SegmentedBarItem extends common.SegmentedBarItem {
+    public _update() {
+        if (this._parent) {
+            var tabIndex = this._parent.items.indexOf(this);
+            this._parent.ios.setTitleForSegmentAtIndex(this.title || "", tabIndex);
+        }
+    }
+}
+
 export class SegmentedBar extends common.SegmentedBar {
     private _ios: UISegmentedControl;
     private _selectionHandler: NSObject;
@@ -71,7 +86,7 @@ export class SegmentedBar extends common.SegmentedBar {
         super();
         this._ios = UISegmentedControl.new();
 
-        this._selectionHandler = SelectionHandlerImpl.new().initWithOwner(this);
+        this._selectionHandler = SelectionHandlerImpl.initWithOwner(new WeakRef(this));
         this._ios.addTargetActionForControlEvents(this._selectionHandler, "selected", UIControlEvents.UIControlEventValueChanged);
     }
 
@@ -81,19 +96,20 @@ export class SegmentedBar extends common.SegmentedBar {
 }
 
 class SelectionHandlerImpl extends NSObject {
-    static new(): SelectionHandlerImpl {
-        return <SelectionHandlerImpl>super.new();
-    }
 
-    private _owner: SegmentedBar;
+    private _owner: WeakRef<SegmentedBar>;
 
-    public initWithOwner(owner: SegmentedBar): SelectionHandlerImpl {
-        this._owner = owner;
-        return this;
+    public static initWithOwner(owner: WeakRef<SegmentedBar>): SelectionHandlerImpl {
+        let handler = <SelectionHandlerImpl>SelectionHandlerImpl.new();
+        handler._owner = owner;
+        return handler;
     }
 
     public selected(sender: UISegmentedControl) {
-        this._owner.selectedIndex = sender.selectedSegmentIndex;
+        let owner = this._owner.get();
+        if (owner) {
+            owner.selectedIndex = sender.selectedSegmentIndex;
+        }
     }
 
     public static ObjCExposedMethods = {

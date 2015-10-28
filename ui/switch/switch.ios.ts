@@ -1,4 +1,4 @@
-﻿import common = require("ui/switch/switch-common");
+﻿import common = require("./switch-common");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
 
@@ -10,24 +10,23 @@ function onCheckedPropertyChanged(data: dependencyObservable.PropertyChangeData)
 // register the setNativeValue callbacks
 (<proxy.PropertyMetadata>common.Switch.checkedProperty.metadata).onSetNativeValue = onCheckedPropertyChanged;
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 class SwitchChangeHandlerImpl extends NSObject {
-    static new(): SwitchChangeHandlerImpl {
-        return <SwitchChangeHandlerImpl>super.new();
-    }
 
-    private _owner: Switch;
+    private _owner: WeakRef<Switch>;
 
-    public initWithOwner(owner: Switch): SwitchChangeHandlerImpl {
-        this._owner = owner;
-        return this;
+    public static initWithOwner(owner: WeakRef<Switch>): SwitchChangeHandlerImpl {
+        let handler = <SwitchChangeHandlerImpl>SwitchChangeHandlerImpl.new();
+        handler._owner = owner;
+        return handler;
     }
 
     public valueChanged(sender: UISwitch) {
-        this._owner._onPropertyChangedFromNative(common.Switch.checkedProperty, sender.on);
+        let owner = this._owner.get();
+        if (owner) {
+            owner._onPropertyChangedFromNative(common.Switch.checkedProperty, sender.on);
+        }
     }
 
     public static ObjCExposedMethods = {
@@ -43,7 +42,7 @@ export class Switch extends common.Switch {
         super();
         this._ios = new UISwitch();
 
-        this._handler = SwitchChangeHandlerImpl.new().initWithOwner(this);
+        this._handler = SwitchChangeHandlerImpl.initWithOwner(new WeakRef(this));
         this._ios.addTargetActionForControlEvents(this._handler, "valueChanged", UIControlEvents.UIControlEventValueChanged);
     }
 

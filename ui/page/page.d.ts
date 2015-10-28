@@ -21,6 +21,11 @@ declare module "ui/page" {
          * The navigation context (optional, may be undefined) passed to the page navigation events method.
          */
         context: any;
+
+        /**
+         * Represents if a navigation is forward or backward.
+         */
+        isBackNavigation: boolean;
     }
 
     /**
@@ -46,6 +51,11 @@ declare module "ui/page" {
      * Represents a logical unit for navigation (inside Frame).
      */
     export class Page extends contentView.ContentView {
+        /**
+         * Dependency property that specify if page background should span under status bar.
+         */
+        public static backgroundSpanUnderStatusBarProperty: dependencyObservable.Property;
+
         /**
          * Dependency property used to hide the Navigation Bar in iOS and the Action Bar in Android.
          */
@@ -77,6 +87,11 @@ declare module "ui/page" {
         public static navigatedFromEvent: string;
 
         constructor(options?: Options)
+
+        /**
+         * Gets or sets whether page background spans under status bar.
+         */
+        backgroundSpanUnderStatusBar: boolean;
 
         /**
          * Used to hide the Navigation Bar in iOS and the Action Bar in Android.
@@ -157,23 +172,41 @@ declare module "ui/page" {
          */
         showModal(moduleName: string, context: any, closeCallback: Function, fullscreen?: boolean);
 
+        /**
+         * Shows the page as a modal view.
+         */
+        showModal();
+
+        /**
+         * Closes the current modal view that this page is showing.
+         */
+        closeModal();
+
+        /**
+         * Returns the current modal view that this page is showing (is parent of), if any.
+         */
+        modal: Page;
+        
         //@private
 
         /**
          * A method called before navigating to the page.
          * @param context - The data passed to the page through the NavigationEntry.context property.
+         * @param isBackNavigation - True if the Page is being navigated from using the Frame.goBack() method, false otherwise.
          */
-        onNavigatingTo(context: any): void;
+        onNavigatingTo(context: any, isBackNavigation: boolean): void;
 
         /**
          * A method called after navigated to the page.
+         * @param isBackNavigation - True if the Page is being navigated from using the Frame.goBack() method, false otherwise.
          */
-        onNavigatedTo(): void;
+        onNavigatedTo(isBackNavigation: boolean): void;
 
         /**
          * A method called before navigating from the page.
+         * @param isBackNavigation - True if the Page is being navigated from using the Frame.goBack() method, false otherwise.
          */
-        onNavigatingFrom(): void;
+        onNavigatingFrom(isBackNavigation: boolean): void;
 
         /**
          * A method called after navigated from the page.

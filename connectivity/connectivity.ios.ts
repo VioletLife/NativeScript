@@ -1,7 +1,6 @@
-﻿import common = require("connectivity/connectivity-common");
+﻿import common = require("./connectivity-common");
 
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 // Get Connection Type
 declare var sockaddr;
@@ -22,7 +21,6 @@ function _getReachabilityFlags(host?: string): number {
     var reachability = _createReachability(host);
     var flagsRef = new interop.Reference<number>();
     var gotFlags = SCNetworkReachabilityGetFlags(reachability, flagsRef);
-    CFRelease(reachability);
     if (!gotFlags) {
         return null;
     }
@@ -69,7 +67,7 @@ var _reachabilityCallbackFunctionRef = new interop.FunctionReference(_reachabili
 var _monitorReachabilityRef: any;
 var _connectionTypeChangedCallback: (newConnectionType: number) => void;
 
-export function starMonitoring(connectionTypeChangedCallback: (newConnectionType: number) => void): void {
+export function startMonitoring(connectionTypeChangedCallback: (newConnectionType: number) => void): void {
     if (!_monitorReachabilityRef) {
         _monitorReachabilityRef = _createReachability();
         _connectionTypeChangedCallback = connectionTypeChangedCallback;
@@ -81,7 +79,6 @@ export function starMonitoring(connectionTypeChangedCallback: (newConnectionType
 export function stopMonitoring(): void {
     if (_monitorReachabilityRef) {
         SCNetworkReachabilityUnscheduleFromRunLoop(_monitorReachabilityRef, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
-        CFRelease(_monitorReachabilityRef);
         _monitorReachabilityRef = undefined;
         _connectionTypeChangedCallback = undefined;;
     }

@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/NativeScript/NativeScript.svg)](https://travis-ci.org/NativeScript/NativeScript)
 # Welcome to the NativeScript framework repository 
 
 ## What is the NativeScript framework
@@ -33,6 +34,10 @@ To learn more about the NativeScript framework, you can check the following reso
 - [The NativeScript framework web site](http://www.nativescript.org)
 - [The NativeScript framework blog](http://www.nativescript.org/blog)
 
+## Angular 2.0
+NativeScript is working together with the Google Angular JS team to make Angular 2.0 work on top of NativeScript. To check our progress please see the following links
+- **[NativeScript Angular 2.0 plugin](https://www.npmjs.com/package/nativescript-angular)** - This plugin is the only thing you need to install in order to enable Angular 2.0 in NativeScript
+- **[TodoMVC sample](//github.com/NativeScript/sample-ng-todomvc)** - The classic TodoMVC sample implemented with NativeScript and Angular 2.0
 
 ## Most popular repositories:
 - **[The current repo](//github.com/NativeScript/NativeScript/)** - Stores the code of the cross-platform modules, written in TypeScript
@@ -42,7 +47,6 @@ To learn more about the NativeScript framework, you can check the following reso
 - **[Docs](//github.com/NativeScript/docs)** - Contains the NativeScript framework documentation (available on http://docs.nativescript.org/) in MarkDown format
 - **[TelerikNEXT conference app](//github.com/NativeScript/sample-TelerikNEXT)** - Stores the code of a complete sample application using user authentication and cloud storage.
 - **[Hello-World Template](//github.com/NativeScript/template-hello-world)** - Contains the code of the application the CLI creates by default
-- **[Cuteness Sample](//github.com/NativeScript/sample-cuteness)** - Stores the code of the Cuteness proof of concept application (A Reddit Kitten browser)
 
 ## Getting Started and How to Install the NativeScript framework
 Please follow this [article to get started with the NativeScript framework](http://docs.nativescript.org/getting-started).
@@ -60,3 +64,4 @@ We love PRs! Please follow our [contribution guide](https://www.nativescript.org
 - **Forum** - [General discussion](https://groups.google.com/forum/#!forum/nativescript)
 - **StackOverflow** - [http://stackoverflow.com/questions/tagged/nativescript](http://stackoverflow.com/questions/tagged/nativescript)
 - **IRC Chatroom** - [http://webchat.freenode.net/?channels=nativescript](http://webchat.freenode.net/?channels=nativescript)
+![](https://ga-beacon.appspot.com/UA-111455-24/nativescript/nativescript?pixel) 

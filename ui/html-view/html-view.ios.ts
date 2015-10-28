@@ -1,4 +1,4 @@
-﻿import common = require("ui/html-view/html-view-common");
+﻿import common = require("./html-view-common");
 import definition = require("ui/html-view");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
@@ -24,25 +24,27 @@ function onHtmlPropertyChanged(data: dependencyObservable.PropertyChangeData) {
 // register the setNativeValue callback
 (<proxy.PropertyMetadata>common.HtmlView.htmlProperty.metadata).onSetNativeValue = onHtmlPropertyChanged;
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 export class HtmlView extends common.HtmlView {
-    private _ios: UILabel;
+    private _ios: UITextView;
 
     constructor(options?: definition.Options) {
         super(options);
+        this._ios = UITextView.new();
 
-        this._ios = new UILabel();
-        super._prepareNativeView(this._ios);
+        this._ios.scrollEnabled = false;
+        this._ios.editable = false;
+        this._ios.selectable = true;
+        this._ios.userInteractionEnabled  = true;
+        this._ios.dataDetectorTypes = UIDataDetectorTypes.UIDataDetectorTypeAll;
     }
 
-    get ios(): UILabel {
+    get ios(): UITextView {
         return this._ios;
     }
 
-    get _nativeView(): UILabel {
+    get _nativeView(): UITextView {
         return this._ios;
     }
 

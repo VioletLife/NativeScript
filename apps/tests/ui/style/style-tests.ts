@@ -47,10 +47,7 @@ export function test_css_is_applied_inside_TabView() {
     var testButton = new buttonModule.Button();
     testButton.text = "Test";
     var tabView = new tabViewModule.TabView();
-    tabView.items = [{
-        title: "First tab",
-        view: testButton
-    }];
+    tabView.items = [new tabViewModule.TabViewItem({ title: "First tab", view: testButton })];
 
     helper.buildUIAndRunTest(tabView, function (views: Array<viewModule.View>) {
         var page = <pageModule.Page>views[1];
@@ -142,7 +139,7 @@ export function test_class_selector() {
 
         //// Will be styled
         btnWithClass = new buttonModule.Button();
-        btnWithClass.cssClass = "test";
+        btnWithClass.className = "test";
 
         //// Won't be styled
         btnWithNoClass = new buttonModule.Button();
@@ -175,7 +172,7 @@ export function test_multiple_class_selector() {
 
         //// Will be styled
         btnWithClasses = new buttonModule.Button();
-        btnWithClasses.cssClass = "style1 style2";
+        btnWithClasses.className = "style1 style2";
 
         var stack = new stackModule.StackLayout();
         page.content = stack;
@@ -293,7 +290,7 @@ export function test_class_and_state_selector() {
         page.content = testStack;
 
         btn = new buttonModule.Button();
-        btn.cssClass = "test"
+        btn.className = "test"
         testStack.addChild(btn);
 
         page.css = ".test:pressed { color: red; }";
@@ -318,7 +315,7 @@ export function test_class_and_state_selector_with_multiple_classes() {
         page.content = testStack;
 
         btn = new buttonModule.Button();
-        btn.cssClass = "test otherClass"
+        btn.className = "test otherClass"
         testStack.addChild(btn);
 
         page.css = ".test:pressed { color: red; }";
@@ -395,14 +392,14 @@ export function test_restore_original_values_when_state_is_changed() {
 //    testPage.content = testStack;
 
 //    var btnWithClass = new button.Button();
-//    btnWithClass.cssClass = "test";
+//    btnWithClass.className = "test";
 //    testStack.addChild(btnWithClass);
 
 //    var btnWithNoClass = new button.Button();
 //    testStack.addChild(btnWithNoClass);
 
 //    var lblWithClass = new label.Label();
-//    lblWithClass.cssClass = "test";
+//    lblWithClass.className = "test";
 //    testStack.addChild(lblWithClass);
 
 //    testPage.css = "button.test { color: red; }";
@@ -434,14 +431,14 @@ export function test_restore_original_values_when_state_is_changed() {
 //    testPage.content = testStack;
 
 //    var btnWithClass = new button.Button();
-//    btnWithClass.cssClass = "test";
+//    btnWithClass.className = "test";
 //    testStack.addChild(btnWithClass);
 
 //    var btnWithNoClass = new button.Button();
 //    testStack.addChild(btnWithNoClass);
 
 //    var lblWithClass = new label.Label();
-//    lblWithClass.cssClass = "test";
+//    lblWithClass.className = "test";
 //    testStack.addChild(lblWithClass);
 
 //    testPage.css = "button.test:pressed { color: red; }";
@@ -509,7 +506,7 @@ export function test_styles_are_updated_when_cssCalss_is_set() {
         helper.assertViewBackgroundColor(btn, "#111111");
         helper.assertViewBackgroundColor(btn2, "#111111");
 
-        btn.cssClass = "button-class";
+        btn.className = "button-class";
 
         helper.assertViewBackgroundColor(btn, "#222222");
         helper.assertViewBackgroundColor(btn2, "#111111");
@@ -521,7 +518,7 @@ export function test_styles_are_updated_when_cssCalss_is_set() {
 export function test_styles_are_updated_when_cssCalss_is_changed() {
     var testStack = new stackModule.StackLayout();
     var btn = new buttonModule.Button();
-    btn.cssClass = "button-class";
+    btn.className = "button-class";
     var btn2 = new buttonModule.Button();
     testStack.addChild(btn);
     testStack.addChild(btn2);
@@ -530,7 +527,7 @@ export function test_styles_are_updated_when_cssCalss_is_changed() {
         helper.assertViewBackgroundColor(btn, "#222222");
         helper.assertViewBackgroundColor(btn2, "#111111");
 
-        btn.cssClass = "button-class-two";
+        btn.className = "button-class-two";
 
         helper.assertViewBackgroundColor(btn, "#333333");
         helper.assertViewBackgroundColor(btn2, "#111111");
@@ -542,7 +539,7 @@ export function test_styles_are_updated_when_cssCalss_is_changed() {
 export function test_styles_are_updated_when_cssCalss_is_cleared() {
     var testStack = new stackModule.StackLayout();
     var btn = new buttonModule.Button();
-    btn.cssClass = "button-class";
+    btn.className = "button-class";
     var btn2 = new buttonModule.Button();
     testStack.addChild(btn);
     testStack.addChild(btn2);
@@ -551,7 +548,7 @@ export function test_styles_are_updated_when_cssCalss_is_cleared() {
         helper.assertViewBackgroundColor(btn, "#222222");
         helper.assertViewBackgroundColor(btn2, "#111111");
 
-        btn.cssClass = undefined;
+        btn.className = undefined;
 
         helper.assertViewBackgroundColor(btn, "#111111");
         helper.assertViewBackgroundColor(btn2, "#111111");
@@ -664,11 +661,11 @@ function testSelectorsPrioritiesTemplate(css: string) {
         testStack.addChild(btn);
 
         btnWithClass = new buttonModule.Button();
-        btnWithClass.cssClass = "button-class";
+        btnWithClass.className = "button-class";
         testStack.addChild(btnWithClass);
 
         btnWithId = new buttonModule.Button();
-        btnWithId.cssClass = "button-class";
+        btnWithId.className = "button-class";
         btnWithId.id = "myButton"
         testStack.addChild(btnWithId);
 
@@ -756,7 +753,7 @@ export function test_setStyle_throws() {
     }, "View.style property is read-only.");
 }
 
-export var test_CSS_isAppliedOnPage = function () {
+export function test_CSS_isAppliedOnPage() {
     var testButton = new buttonModule.Button();
     testButton.text = "Test";
 
@@ -767,7 +764,7 @@ export var test_CSS_isAppliedOnPage = function () {
     });
 }
 
-export var test_CSS_isAppliedOnPage_From_Import = function () {
+export function test_CSS_isAppliedOnPage_From_Import() {
     var testButton = new buttonModule.Button();
     testButton.text = "Test";
 
@@ -778,7 +775,18 @@ export var test_CSS_isAppliedOnPage_From_Import = function () {
     });
 }
 
-export var test_CSS_isAppliedOnPage_From_addCssFile = function () {
+export function test_CSS_isAppliedOnPage_From_Import_Without_Url() {
+    var testButton = new buttonModule.Button();
+    testButton.text = "Test";
+
+    helper.buildUIAndRunTest(testButton, function (views: Array<viewModule.View>) {
+        var page: pageModule.Page = <pageModule.Page> views[1];
+        page.css = "@import '~/ui/style/test.css';";
+        helper.assertViewBackgroundColor(page, "#FF0000");
+    });
+}
+
+export function test_CSS_isAppliedOnPage_From_addCssFile() {
     var testButton = new buttonModule.Button();
     testButton.text = "Test";
 
@@ -787,6 +795,52 @@ export var test_CSS_isAppliedOnPage_From_addCssFile = function () {
         page.addCssFile("~/ui/style/test.css");
         helper.assertViewBackgroundColor(page, "#FF0000");
     });
+}
+
+var invalidCSS = ".invalid { " +
+    "color: invalidValue; " +
+    "background-color: invalidValue; " +
+    "border-color: invalidValue; " +
+    "border-width: invalidValue; " +
+    "border-radius: invalidValue; " +
+    "font: invalidValue; " +
+    "font-style: invalidValue; " +
+    "font-weight: invalidValue; " +
+    "text-align: invalidValue; " +
+    "min-width: invalidValue; " +
+    "min-height: invalidValue; " +
+    "visibility: invalidValue; " +
+    "opacity: invalidValue; " +
+    "font-size: 30;" + // set one valid value to test it is applied
+"}";
+
+export function test_set_invalid_CSS_values_dont_cause_crash() {
+    var testButton = new buttonModule.Button();
+    testButton.text = "Test";
+    testButton.className = "invalid";
+
+    helper.buildUIAndRunTest(testButton, function (views: Array<viewModule.View>) {
+        TKUnit.assertEqual(30, testButton.style.fontSize);
+    }, invalidCSS);
+}
+
+// Check Mixed, Upper and lower case properties
+var casedCSS = ".cased {" +
+    "cOlOr: blue; " +
+    "FONT-SIZE: 30; " +
+    "background-color: red; " +
+    "}";
+
+export function test_set_mixed_CSS_cases_works() {
+    var testButton = new buttonModule.Button();
+    testButton.text = "Test";
+    testButton.className = "cased";
+
+    helper.buildUIAndRunTest(testButton, function (views: Array<viewModule.View>) {
+        TKUnit.assertEqual(30, testButton.style.fontSize);
+        helper.assertViewBackgroundColor(testButton, "#FF0000");
+        helper.assertViewColor(testButton, "#0000FF");
+    }, casedCSS);
 }
 
 // <snippet module="ui/styling" title="styling">

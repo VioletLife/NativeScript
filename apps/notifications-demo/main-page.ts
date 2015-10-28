@@ -5,6 +5,17 @@ import labelModule = require("ui/label");
 
 var batteryLabel: labelModule.Label;
 var registered = false;
+var batteryObserver: any;
+
+application.on(application.exitEvent, () => {
+    if (application.android) {
+        application.android.unregisterBroadcastReceiver(android.content.Intent.ACTION_BATTERY_CHANGED);
+    }
+    else {
+        application.ios.removeNotificationObserver(batteryObserver, UIDeviceBatteryLevelDidChangeNotification);
+    }
+});
+
 export function onPageLoaded(args: observable.EventData) {
     var page = <pages.Page>args.object;
     batteryLabel = page.getViewById<labelModule.Label>("batteryLabel");
@@ -33,7 +44,7 @@ export function onPageLoaded(args: observable.EventData) {
         }
         UIDevice.currentDevice().batteryMonitoringEnabled = true;
         onReceiveCallback(null);
-        application.ios.addNotificationObserver(UIDeviceBatteryLevelDidChangeNotification, onReceiveCallback);
+        batteryObserver = application.ios.addNotificationObserver(UIDeviceBatteryLevelDidChangeNotification, onReceiveCallback);
     }
     registered = true;
 }

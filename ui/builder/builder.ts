@@ -1,7 +1,6 @@
 ﻿import view = require("ui/core/view");
 import fs = require("file-system");
 import xml = require("xml");
-import file_access_module = require("file-system/file-system-access");
 import types = require("utils/types");
 import componentBuilder = require("ui/builder/component-builder");
 import templateBuilderDef = require("ui/builder/template-builder");
@@ -76,15 +75,14 @@ function parseInternal(value: string, context: any): componentBuilder.ComponentM
         }
 
         if (templateBuilder) {
-            if (args.eventType === xml.ParserEventType.StartElement) {
-                templateBuilder.addStartElement(args.prefix, args.namespace, args.elementName, args.attributes);
-            } else if (args.eventType === xml.ParserEventType.EndElement) {
-                if (templateBuilder.elementName !== args.elementName) {
-                    templateBuilder.addEndElement(args.prefix, args.elementName);
-                } else {
-                    templateBuilder.build();
-                    templateBuilder = undefined;
-                }
+            var finished = templateBuilder.handleElement(args);
+            if (finished) {
+                // Clean-up and continnue
+                templateBuilder = undefined;
+            }
+            else {
+                // Skip processing untill the template builder finishes his job.
+                return;
             }
         }
 
@@ -138,6 +136,8 @@ function parseInternal(value: string, context: any): componentBuilder.ComponentM
                         } else if (complexProperty) {
                             // Add component to complex property of parent component.
                             addToComplexProperty(parent, complexProperty, componentModule);
+                        } else if ((<any>parent.component)._addChildFromBuilder) {
+                            (<any>parent.component)._addChildFromBuilder(args.elementName, componentModule.component);
                         }
                     } else if (parents.length === 0) {
                         // Set root component.
@@ -193,11 +193,11 @@ function loadCustomComponent(componentPath: string, componentName?: string, attr
         fullComponentPathFilePathWithoutExt = fs.path.join(fs.knownFolders.currentApp().path, componentPath, componentName);
     }
 
-    var xmlFilePath = resolveFilePath(fullComponentPathFilePathWithoutExt, "xml");
+    var xmlFilePath = fileResolverModule.resolveFileName(fullComponentPathFilePathWithoutExt, "xml");
 
     if (xmlFilePath) {
         // Custom components with XML
-        var jsFilePath = resolveFilePath(fullComponentPathFilePathWithoutExt, "js");
+        var jsFilePath = fileResolverModule.resolveFileName(fullComponentPathFilePathWithoutExt, "js");
 
         var subExports;
         if (jsFilePath) {
@@ -220,7 +220,7 @@ function loadCustomComponent(componentPath: string, componentName?: string, attr
     }
 
     // Add component CSS file if exists.
-    var cssFilePath = resolveFilePath(fullComponentPathFilePathWithoutExt, "css");
+    var cssFilePath = fileResolverModule.resolveFileName(fullComponentPathFilePathWithoutExt, "css");
     if (cssFilePath) {
         if (parentPage) {
             parentPage.addCssFile(cssFilePath);
@@ -230,19 +230,6 @@ function loadCustomComponent(componentPath: string, componentName?: string, attr
     }
 
     return result;
-}
-
-var fileNameResolver: fileResolverModule.FileNameResolver;
-function resolveFilePath(path, ext): string {
-    if (!fileNameResolver) {
-        fileNameResolver = new fileResolverModule.FileNameResolver({
-            width: platform.screen.mainScreen.widthDIPs,
-            height: platform.screen.mainScreen.heightDIPs,
-            os: platform.device.os,
-            deviceType: platform.device.deviceType
-        });
-    }
-    return fileNameResolver.resolveFileName(path, ext);
 }
 
 export function load(pathOrOptions: string | definition.LoadOptions, context?: any): view.View {
@@ -274,15 +261,12 @@ function loadInternal(fileName: string, context?: any): componentBuilder.Compone
 
     // Check if the XML file exists.
     if (fs.File.exists(fileName)) {
-
-        var fileAccess = new file_access_module.FileSystemAccess();
-
-        // Read the XML file.
-        fileAccess.readText(fileName, result => {
-            componentModule = parseInternal(result, context);
-        }, (e) => {
-                throw new Error("Error loading file " + fileName + " :" + e.message);
-            });
+        var file = fs.File.fromPath(fileName);
+        var onError = function (error) {
+            throw new Error("Error loading file " + fileName + " :" + error.message);
+        }
+        var text = file.readTextSync(onError);
+        componentModule = parseInternal(text, context);
     }
 
     if (componentModule && componentModule.component) {
@@ -318,7 +302,7 @@ function addToComplexProperty(parent: componentBuilder.ComponentModule, complexP
     if (isKnownCollection(complexProperty.name, parent.exports)) {
         complexProperty.items.push(elementModule.component);
     } else if (parentComponent._addChildFromBuilder) {
-        parentComponent._addChildFromBuilder("", elementModule.component);
+        parentComponent._addChildFromBuilder(complexProperty.name, elementModule.component);
     } else {
         // Or simply assign the value;
         parentComponent[complexProperty.name] = elementModule.component;

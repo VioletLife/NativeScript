@@ -10,11 +10,11 @@ export var secureProperty = new dependencyObservable.Property(
     new proxy.PropertyMetadata(false)
     );
 
-// merge the exports of the textBase file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(textBase, exports);
+global.moduleMerge(textBase, exports);
 
 export class TextField extends editableTextBase.EditableTextBase implements definition.TextField {
+    public static returnPressEvent = "returnPress";
+
     constructor(options?: definition.Options) {
         super(options);
     }

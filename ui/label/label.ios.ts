@@ -1,10 +1,9 @@
-﻿import common = require("ui/label/label-common");
+﻿import common = require("./label-common");
 import definition = require("ui/label");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
 import utils = require("utils/utils");
 import viewModule = require("ui/core/view");
-import trace = require("trace");
 
 function onTextWrapPropertyChanged(data: dependencyObservable.PropertyChangeData) {
     var label = <Label>data.object;
@@ -22,9 +21,50 @@ function onTextWrapPropertyChanged(data: dependencyObservable.PropertyChangeData
 // register the setNativeValue callback
 (<proxy.PropertyMetadata>common.Label.textWrapProperty.metadata).onSetNativeValue = onTextWrapPropertyChanged;
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
+
+class UILabelImpl extends UILabel {
+
+    private _owner: WeakRef<Label>;
+
+    public static initWithOwner(owner: WeakRef<Label>): UILabelImpl {
+        let labelImpl = <UILabelImpl>UILabelImpl.new();
+        labelImpl._owner = owner;
+        return labelImpl;
+    }
+
+    public textRectForBoundsLimitedToNumberOfLines(bounds: CGRect, numberOfLines: number): CGRect {
+        let rect = super.textRectForBoundsLimitedToNumberOfLines(bounds, numberOfLines);
+        let owner = this._owner.get();
+        if (owner) {
+            let size = rect.size;
+            rect = CGRectMake(
+                - (owner.borderWidth + owner.style.paddingLeft),
+                - (owner.borderWidth + owner.style.paddingTop),
+                size.width + (owner.borderWidth + owner.style.paddingLeft + owner.style.paddingRight + owner.borderWidth),
+                size.height + (owner.borderWidth + owner.style.paddingTop + owner.style.paddingBottom + owner.borderWidth)
+            );
+        }
+
+        return rect;
+    }
+
+    public drawTextInRect(rect: CGRect): void {
+        let owner = this._owner.get();
+        let textRect: CGRect;
+        let size = rect.size;
+        if (owner) {
+            textRect = CGRectMake((owner.borderWidth + owner.style.paddingLeft), (owner.borderWidth + owner.style.paddingTop),
+                size.width - (owner.borderWidth + owner.style.paddingLeft + owner.style.paddingRight + owner.borderWidth),
+                size.height - (owner.borderWidth + owner.style.paddingTop + owner.style.paddingBottom + owner.borderWidth));
+        }
+        else {
+            textRect = CGRectMake(0, 0, size.width, size.height);
+        }
+
+        super.drawTextInRect(textRect);
+    }
+}
 
 export class Label extends common.Label {
     private _ios: UILabel;
@@ -32,8 +72,8 @@ export class Label extends common.Label {
     constructor(options?: definition.Options) {
         super(options);
 
-        this._ios = new UILabel();
-        super._prepareNativeView(this._ios);
+        this._ios = UILabelImpl.initWithOwner(new WeakRef(this));
+        this._ios.userInteractionEnabled = true;
     }
 
     get ios(): UILabel {
@@ -61,8 +101,6 @@ export class Label extends common.Label {
             if (heightMode === utils.layout.UNSPECIFIED) {
                 height = Number.POSITIVE_INFINITY;
             }
-
-            trace.write(this + " :onMeasure: " + utils.layout.getMode(widthMode) + " " + width + ", " + utils.layout.getMode(heightMode) + " " + height, trace.categories.Layout);
 
             var nativeSize = nativeView.sizeThatFits(CGSizeMake(width, height));
             var labelWidth = nativeSize.width;

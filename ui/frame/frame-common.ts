@@ -5,8 +5,6 @@ import types = require("utils/types");
 import trace = require("trace");
 import builder = require("ui/builder");
 import fs = require("file-system");
-import utils = require("utils/utils");
-import platform = require("platform");
 import fileResolverModule = require("file-system/file-name-resolver");
 
 var frameStack: Array<Frame> = [];
@@ -47,7 +45,7 @@ export function resolvePageFromEntry(entry: definition.NavigationEntry): pages.P
         var moduleNamePath = fs.path.join(currentAppPath, entry.moduleName);
 
         var moduleExports;
-        var moduleExportsResolvedPath = resolveFilePath(moduleNamePath, "js");
+        var moduleExportsResolvedPath = fileResolverModule.resolveFileName(moduleNamePath, "js");
         if (moduleExportsResolvedPath) {
             trace.write("Loading JS file: " + moduleExportsResolvedPath, trace.categories.Navigation);
             
@@ -67,22 +65,15 @@ export function resolvePageFromEntry(entry: definition.NavigationEntry): pages.P
         if (!(page && page instanceof pages.Page)) {
             throw new Error("Failed to load Page from entry.moduleName: " + entry.moduleName);
         }
+
+        // Possible CSS file path. Add it only if CSS not already specified and loaded from cssFile Page attribute in XML.
+        var cssFileName = fileResolverModule.resolveFileName(moduleNamePath, "css");
+        if (cssFileName && !page["cssFile"]) {
+            page.addCssFile(cssFileName);
+        }
     }
 
     return page;
-}
-
-var fileNameResolver: fileResolverModule.FileNameResolver;
-function resolveFilePath(path, ext) : string {
-    if (!fileNameResolver) {
-        fileNameResolver = new fileResolverModule.FileNameResolver({
-            width: platform.screen.mainScreen.widthDIPs,
-            height: platform.screen.mainScreen.heightDIPs,
-            os: platform.device.os,
-            deviceType: platform.device.deviceType
-        });
-    }
-    return fileNameResolver.resolveFileName(path, ext);
 }
 
 function pageFromBuilder(moduleNamePath: string, moduleExports: any): pages.Page {
@@ -90,7 +81,7 @@ function pageFromBuilder(moduleNamePath: string, moduleExports: any): pages.Page
     var element: view.View;
 
     // Possible XML file path.
-    var fileName = resolveFilePath(moduleNamePath, "xml");
+    var fileName = fileResolverModule.resolveFileName(moduleNamePath, "xml");
     if (fileName) {
         trace.write("Loading XML file: " + fileName, trace.categories.Navigation);
 
@@ -98,12 +89,6 @@ function pageFromBuilder(moduleNamePath: string, moduleExports: any): pages.Page
         element = builder.load(fileName, moduleExports);
         if (element instanceof pages.Page) {
             page = <pages.Page>element;
-
-            // Possible CSS file path.
-            var cssFileName = resolveFilePath(moduleNamePath, "css");
-            if (cssFileName) {
-                page.addCssFile(cssFileName);
-            }
         }
     }
 
@@ -199,7 +184,7 @@ export class Frame extends view.CustomLayoutView implements definition.Frame {
         var entry = this._navigationQueue[0].entry;
         var currentNavigationPage = entry.resolvedPage;
         if (page !== currentNavigationPage) {
-            throw new Error("Corrupted navigation stack.");
+            throw new Error(`Corrupted navigation stack; page: ${page.id}; currentNavigationPage: ${currentNavigationPage.id}`);
         }
 
         // remove completed operation.
@@ -209,6 +194,21 @@ export class Frame extends view.CustomLayoutView implements definition.Frame {
             var navigationContext = this._navigationQueue[0];
             this._processNavigationContext(navigationContext);
         }
+    }
+
+    public _isEntryBackstackVisible(entry: definition.BackstackEntry): boolean {
+        if (!entry) {
+            return false;
+        }
+
+        var backstackVisibleValue = entry.entry.backstackVisible;
+        var backstackHidden = types.isDefined(backstackVisibleValue) && !backstackVisibleValue;
+
+        return !backstackHidden;
+    }
+
+    public _updateActionBar(page?: pages.Page) {
+        trace.write("calling _updateActionBar on Frame", trace.categories.Navigation);
     }
 
     private _processNavigationContext(navigationContext: NavigationContext) {
@@ -222,9 +222,12 @@ export class Frame extends view.CustomLayoutView implements definition.Frame {
 
     private performNavigation(navigationContext: NavigationContext) {
         var navContext = navigationContext.entry;
-        this._onNavigatingTo(navContext);
+        this._onNavigatingTo(navContext, navigationContext.isBackNavigation);
 
-        if (this.currentPage) {
+        if (navigationContext.entry.entry.clearHistory) {
+            this._backStack.length = 0;
+        }
+        else if (this._isEntryBackstackVisible(this._currentEntry)) {
             this._backStack.push(this._currentEntry);
         }
 
@@ -234,7 +237,7 @@ export class Frame extends view.CustomLayoutView implements definition.Frame {
 
     private performGoBack(navigationContext: NavigationContext) {
         var navContext = navigationContext.entry;
-        this._onNavigatingTo(navContext);
+        this._onNavigatingTo(navContext, navigationContext.isBackNavigation);
         this._goBackCore(navContext);
         this._onNavigatedTo(navContext, true);
     }
@@ -247,12 +250,12 @@ export class Frame extends view.CustomLayoutView implements definition.Frame {
         //
     }
 
-    public _onNavigatingTo(backstackEntry: definition.BackstackEntry) {
+    public _onNavigatingTo(backstackEntry: definition.BackstackEntry, isBack: boolean) {
         if (this.currentPage) {
-            this.currentPage.onNavigatingFrom();
+            this.currentPage.onNavigatingFrom(isBack);
         }
 
-        backstackEntry.resolvedPage.onNavigatingTo(backstackEntry.entry.context);
+        backstackEntry.resolvedPage.onNavigatingTo(backstackEntry.entry.context, isBack);
     }
 
     public _onNavigatedTo(backstackEntry: definition.BackstackEntry, isBack: boolean) {
@@ -337,27 +340,12 @@ export class Frame extends view.CustomLayoutView implements definition.Frame {
         return "Frame<" + this._domId + ">";
     }
 
-    protected get navigationBarHeight(): number {
+    public get navigationBarHeight(): number {
         return 0;
     }
 
-    public onMeasure(widthMeasureSpec: number, heightMeasureSpec: number): void {
-        var width = utils.layout.getMeasureSpecSize(widthMeasureSpec);
-        var widthMode = utils.layout.getMeasureSpecMode(widthMeasureSpec);
-
-        var height = utils.layout.getMeasureSpecSize(heightMeasureSpec);
-        var heightMode = utils.layout.getMeasureSpecMode(heightMeasureSpec);
-
-        var result = view.View.measureChild(this, this.currentPage, widthMeasureSpec, utils.layout.makeMeasureSpec(height - this.navigationBarHeight, heightMode));
-
-        var widthAndState = view.View.resolveSizeAndState(result.measuredWidth, width, widthMode, 0);
-        var heightAndState = view.View.resolveSizeAndState(result.measuredHeight, height, heightMode, 0);
-
-        this.setMeasuredDimension(widthAndState, heightAndState);
-    }
-
-    public onLayout(left: number, top: number, right: number, bottom: number): void {
-        view.View.layoutChild(this, this.currentPage, 0, this.navigationBarHeight, right - left, bottom - top);
+    public _getNavBarVisible(page: pages.Page): boolean {
+        throw new Error();
     }
 
     // We don't need to put Page as visual child. Don't call super.

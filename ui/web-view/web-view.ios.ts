@@ -1,29 +1,24 @@
-﻿import common = require("ui/web-view/web-view-common");
+﻿import common = require("./web-view-common");
 import trace = require("trace");
-import utils = require("utils/utils");
-import fs = require("file-system");
 
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 class UIWebViewDelegateImpl extends NSObject implements UIWebViewDelegate {
     public static ObjCProtocols = [UIWebViewDelegate];
 
-    static new(): UIWebViewDelegateImpl {
-        return <UIWebViewDelegateImpl>super.new();
-    }
+    private _owner: WeakRef<WebView>;
 
-    private _owner: WebView;
-
-    public initWithOwner(owner: WebView): UIWebViewDelegateImpl {
-        this._owner = owner;
-        return this;
+    public static initWithOwner(owner: WeakRef<WebView>): UIWebViewDelegateImpl {
+        let delegate = <UIWebViewDelegateImpl>UIWebViewDelegateImpl.new();
+        delegate._owner = owner;
+        return delegate;
     }
 
     public webViewShouldStartLoadWithRequestNavigationType(webView: UIWebView, request: NSURLRequest, navigationType: number) {
-        if (request.URL) {
+        let owner = this._owner.get();
+        if (owner && request.URL) {
             trace.write("UIWebViewDelegateClass.webViewShouldStartLoadWithRequestNavigationType(" + request.URL.absoluteString + ", " + navigationType + ")", trace.categories.Debug);
-            this._owner._onLoadStarted(request.URL.absoluteString);
+            owner._onLoadStarted(request.URL.absoluteString);
         }
 
         return true;
@@ -35,17 +30,25 @@ class UIWebViewDelegateImpl extends NSObject implements UIWebViewDelegate {
 
     public webViewDidFinishLoad(webView: UIWebView) {
         trace.write("UIWebViewDelegateClass.webViewDidFinishLoad(" + webView.request.URL + ")", trace.categories.Debug);
-        this._owner._onLoadFinished(webView.request.URL.absoluteString);
+        let owner = this._owner.get();
+        if (owner) {
+            owner._onLoadFinished(webView.request.URL.absoluteString);
+        }
     }
 
     public webViewDidFailLoadWithError(webView: UIWebView, error: NSError) {
-        var url = this._owner.url;
-        if (webView.request && webView.request.URL) {
-            url = webView.request.URL.absoluteString;
-        }
+        let owner = this._owner.get();
+        if (owner) {
+            var url = owner.url;
+            if (webView.request && webView.request.URL) {
+                url = webView.request.URL.absoluteString;
+            }
 
-        trace.write("UIWebViewDelegateClass.webViewDidFailLoadWithError(" + error.localizedDescription + ")", trace.categories.Debug);
-        this._owner._onLoadFinished(url, error.localizedDescription);
+            trace.write("UIWebViewDelegateClass.webViewDidFailLoadWithError(" + error.localizedDescription + ")", trace.categories.Debug);
+            if (owner) {
+                owner._onLoadFinished(url, error.localizedDescription);
+            }
+        }
     }
 }
 
@@ -57,7 +60,7 @@ export class WebView extends common.WebView {
         super();
 
         this._ios = new UIWebView();
-        this._delegate = UIWebViewDelegateImpl.new().initWithOwner(this);
+        this._delegate = UIWebViewDelegateImpl.initWithOwner(new WeakRef(this));
     }
 
     public onLoaded() {
@@ -74,6 +77,10 @@ export class WebView extends common.WebView {
         return this._ios;
     }
 
+    public stopLoading() {
+        this._ios.stopLoading();
+    }
+
     public _loadUrl(url: string) {
         trace.write("WebView._loadUrl(" + url + ")", trace.categories.Debug);
 
@@ -83,30 +90,17 @@ export class WebView extends common.WebView {
         this._ios.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString(url)));
     }
 
-    public _loadSrc(src: string) {
-        trace.write("WebView._loadSrc(" + src + ")", trace.categories.Debug);
+    public _loadFileOrResource(path: string, content: string) {
+        var baseURL = NSURL.fileURLWithPath(NSString.stringWithString(path).stringByDeletingLastPathComponent);
+        this._ios.loadHTMLStringBaseURL(content, baseURL);
+    }
 
-        if (this._ios.loading) {
-            this._ios.stopLoading();
-        }
+    public _loadHttp(src: string) {
+        this._ios.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString(src)));
+    }
 
-        if (utils.isFileOrResourcePath(src)) {
-
-            if (src.indexOf("~/") === 0) {
-                src = fs.path.join(fs.knownFolders.currentApp().path, src.replace("~/", ""));
-            }
-
-            var file = fs.File.fromPath(src);
-            if (file) {
-                file.readText().then((r) => {
-                    this._ios.loadHTMLStringBaseURL(r, null);
-                });
-            }
-        } else if (src.indexOf("http://") === 0 || src.indexOf("https://") === 0) {
-            this._ios.loadRequest(NSURLRequest.requestWithURL(NSURL.URLWithString(src)));
-        } else {
-            this._ios.loadHTMLStringBaseURL(src, null);
-        }
+    public _loadData(src: string) {
+        this._ios.loadHTMLStringBaseURL(src, null);
     }
 
     get canGoBack(): boolean {

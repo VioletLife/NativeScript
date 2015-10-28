@@ -1,14 +1,11 @@
-﻿import appModule = require("application/application-common");
+﻿import appModule = require("./application-common");
 import dts = require("application");
 import frame = require("ui/frame");
 import types = require("utils/types");
 import observable = require("data/observable");
+import enums = require("ui/enums");
 
-// merge the exports of the application_common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(appModule, exports);
-
-export var mainModule: string;
+global.moduleMerge(appModule, exports);
 
 // We are using the exports object for the common events since we merge the appModule with this module's exports, which is what users will receive when require("application") is called;
 // TODO: This is kind of hacky and is "pure JS in TypeScript"
@@ -198,7 +195,7 @@ export class AndroidApplication extends observable.Observable implements dts.And
     public onActivityResult: (requestCode: number, resultCode: number, data: android.content.Intent) => void;
 
     private _eventsToken: any;
-    
+
     public getActivity(intent: android.content.Intent): Object {
         if (intent && intent.getAction() === android.content.Intent.ACTION_MAIN) {
             // application's main activity
@@ -207,6 +204,8 @@ export class AndroidApplication extends observable.Observable implements dts.And
             }
 
             exports.notify({ eventName: dts.launchEvent, object: this, android: intent });
+
+            setupOrientationListener(this);
 
             /* In the onLaunch event we expect the following setup, which ensures a root frame:
             * var frame = require("ui/frame");
@@ -217,10 +216,15 @@ export class AndroidApplication extends observable.Observable implements dts.And
 
         var topFrame = frame.topmost();
         if (!topFrame) {
-            // try to navigate to the mainModule (if specified)
-            if (mainModule) {
+            // try to navigate to the mainEntry/Module (if specified)
+            var navParam = dts.mainEntry;
+            if (!navParam) {
+                navParam = dts.mainModule;
+            }
+
+            if (navParam) {
                 topFrame = new frame.Frame();
-                topFrame.navigate(mainModule);
+                topFrame.navigate(navParam);
             } else {
                 // TODO: Throw an exception?
                 throw new Error("A Frame must be used to navigate to a Page.");
@@ -294,22 +298,15 @@ class BroadcastReceiver extends android.content.BroadcastReceiver {
             this._onReceiveCallback(context, intent);
         }
     }
-} 
+}
 
 global.__onUncaughtError = function (error: Error) {
-    if (!types.isFunction(exports.onUncaughtError)) {
-        return;
+    // TODO: Obsolete this
+    if (types.isFunction(exports.onUncaughtError)) {
+        exports.onUncaughtError(error);
     }
 
-    var nsError = {
-        message: error.message,
-        name: error.name,
-        nativeError: (<any>error).nativeException
-    }
-
-    exports.onUncaughtError(nsError);
-
-    exports.notify({ eventName: dts.uncaughtErrorEvent, object: appModule.android, android: nsError });
+    exports.notify({ eventName: dts.uncaughtErrorEvent, object: appModule.android, android: error });
 }
 
 exports.start = function () {
@@ -317,3 +314,36 @@ exports.start = function () {
 }
 
 exports.android = new AndroidApplication();
+
+var currentOrientation: number;
+function setupOrientationListener(androidApp: AndroidApplication) {
+    androidApp.registerBroadcastReceiver(android.content.Intent.ACTION_CONFIGURATION_CHANGED, onConfigurationChanged);
+    currentOrientation = androidApp.context.getResources().getConfiguration().orientation
+}
+function onConfigurationChanged(context: android.content.Context, intent: android.content.Intent) {
+    var orientation = context.getResources().getConfiguration().orientation;
+
+    if (currentOrientation !== orientation) {
+        currentOrientation = orientation;
+
+        var newValue;
+        switch (orientation) {
+            case android.content.res.Configuration.ORIENTATION_LANDSCAPE:
+                newValue = enums.DeviceOrientation.landscape;
+                break;
+            case android.content.res.Configuration.ORIENTATION_PORTRAIT:
+                newValue = enums.DeviceOrientation.portrait;
+                break;
+            default:
+                newValue = enums.DeviceOrientation.unknown;
+                break;
+        }
+
+        exports.notify(<dts.OrientationChangedEventData> {
+            eventName: dts.orientationChangedEvent,
+            android: context,
+            newValue: newValue,
+            object: exports.android,
+        });
+    }
+}

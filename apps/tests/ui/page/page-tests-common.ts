@@ -27,6 +27,7 @@ import LabelModule = require("ui/label");
 import stackLayoutModule = require("ui/layouts/stack-layout");
 import helper = require("../helper");
 import view = require("ui/core/view");
+import platform = require("platform");
 
 export function addLabelToPage(page: PageModule.Page, text?: string) {
     var label = new LabelModule.Label();
@@ -105,7 +106,7 @@ export function test_PageLoaded_is_called_once() {
     }
 }
 
-export var test_NavigateToNewPage = function () {
+export function test_NavigateToNewPage() {
     var currentPage;
     currentPage = FrameModule.topmost().currentPage;
     // <snippet module="ui/page" title="Page">
@@ -146,7 +147,7 @@ export var test_NavigateToNewPage = function () {
     TKUnit.assert(testPage._isAddedToNativeVisualTree === false, "Page._isAddedToNativeVisualTree should become false after navigating back");
 }
 
-export var test_PageNavigation_EventSequence = function () {
+export function test_PageNavigation_EventSequence() {
     var testPage: PageModule.Page;
     var context = { property: "this is the context" };
     var eventSequence = [];
@@ -184,7 +185,7 @@ export var test_PageNavigation_EventSequence = function () {
     TKUnit.arrayAssert(eventSequence, expectedEventSequence, "Actual event sequence is not equal to expected.");
 }
 
-export var test_NavigateTo_WithContext = function () {
+export function test_NavigateTo_WithContext() {
     var currentPage;
     currentPage = FrameModule.topmost().currentPage;
     // <snippet module="ui/page" title="Page">
@@ -220,8 +221,7 @@ export var test_NavigateTo_WithContext = function () {
     TKUnit.assert(testPage.navigationContext === undefined, "Navigation context should be cleared on navigating back");
 }
 
-export var test_FrameBackStack_WhenNavigatingForwardAndBack = function () {
-    var testPage: PageModule.Page;
+export function test_FrameBackStack_WhenNavigatingForwardAndBack() {
     var pageFactory = function () {
         var testPage = new PageModule.Page();
         addLabelToPage(testPage);
@@ -243,12 +243,12 @@ export var test_FrameBackStack_WhenNavigatingForwardAndBack = function () {
     TKUnit.assert(topFrame.canGoBack() === false, "canGoBack should return false.");
 }
 
-export var test_LoadPageFromModule = function () {
+export function test_LoadPageFromModule() {
     helper.navigateToModule("ui/page/test-page-module");
     try {
         var topFrame = FrameModule.topmost();
         TKUnit.assert(topFrame.currentPage.content instanceof LabelModule.Label, "Content of the test page should be a Label created within test-page-module.");
-        var testLabel = <LabelModule.Label>topFrame.currentPage.content
+        var testLabel = <LabelModule.Label>topFrame.currentPage.content;
         TKUnit.assert(testLabel.text === "Label created within a page module.");
     }
     finally {
@@ -256,7 +256,36 @@ export var test_LoadPageFromModule = function () {
     }
 }
 
-export var test_NavigateToPageCreatedWithNavigationEntry = function () {
+export function test_LoadPageFromDeclarativeWithCSS() {
+    helper.navigateToModule("ui/page/test-page-declarative-css");
+    try {
+        var topFrame = FrameModule.topmost();
+        TKUnit.assert(topFrame.currentPage.content instanceof LabelModule.Label, "Content of the test page should be a Label created within test-page-module-css.");
+        var testLabel = <LabelModule.Label>topFrame.currentPage.content;
+        TKUnit.assert(testLabel.text === "Label created within a page declarative file with css.");
+        TKUnit.assert(testLabel.style.backgroundColor.hex === "#ff00ff00", "Expected: #ff00ff00, Actual: " + testLabel.style.backgroundColor.hex);
+    }
+    finally {
+        helper.goBack();
+    }
+
+}
+
+export function test_LoadPageFromModuleWithCSS() {
+    helper.navigateToModule("ui/page/test-page-module-css");
+    try {
+        var topFrame = FrameModule.topmost();
+        TKUnit.assert(topFrame.currentPage.content instanceof LabelModule.Label, "Content of the test page should be a Label created within test-page-module-css.");
+        var testLabel = <LabelModule.Label>topFrame.currentPage.content;
+        TKUnit.assert(testLabel.text === "Label created within a page module css.");
+        TKUnit.assert(testLabel.style.backgroundColor.hex === "#ff00ff00", "Expected: #ff00ff00, Actual: " + testLabel.style.backgroundColor.hex);
+    }
+    finally {
+        helper.goBack();
+    }
+}
+
+export function test_NavigateToPageCreatedWithNavigationEntry() {
     var expectedText = "Label created with a NavigationEntry";
     var testPage: PageModule.Page;
     var pageFactory = function () {
@@ -276,8 +305,7 @@ export var test_NavigateToPageCreatedWithNavigationEntry = function () {
     }
 }
 
-export var test_cssShouldBeAppliedToAllNestedElements = function () {
-    var testPage: PageModule.Page;
+export function test_cssShouldBeAppliedToAllNestedElements() {
     var label: LabelModule.Label;
     var StackLayout: stackLayoutModule.StackLayout;
     var pageFactory = function () {
@@ -303,7 +331,7 @@ export var test_cssShouldBeAppliedToAllNestedElements = function () {
     }
 }
 
-export var test_cssShouldBeAppliedAfterChangeToAllNestedElements = function () {
+export function test_cssShouldBeAppliedAfterChangeToAllNestedElements() {
     var testPage: PageModule.Page;
     var label: LabelModule.Label;
     var StackLayout: stackLayoutModule.StackLayout;
@@ -333,3 +361,112 @@ export var test_cssShouldBeAppliedAfterChangeToAllNestedElements = function () {
         helper.goBack();
     }
 }
+
+export function test_page_backgroundColor_is_white() {
+    helper.do_PageTest_WithButton(function testBackground(views: Array<view.View>) {
+        var page = <PageModule.Page>views[0];
+        TKUnit.assertEqual(page.style.backgroundColor.hex.toLowerCase(), "#ffffff", "page background-color");
+    });
+}
+
+export function test_WhenPageIsLoadedFrameCurrentPageIsTheSameInstance() {
+    var page;
+    var loadedEventHandler = function (args) {
+        TKUnit.assert(FrameModule.topmost().currentPage === args.object, `frame.topmost().currentPage should be equal to args.object page instance in the page.loaded event handler. Expected: ${args.object.id}; Actual: ${FrameModule.topmost().currentPage.id};`);
+    }
+
+    var pageFactory = function (): PageModule.Page {
+        page = new PageModule.Page();
+        page.id = "newPage";
+        page.on(view.View.loadedEvent, loadedEventHandler);
+        var label = new LabelModule.Label();
+        label.text = "Text";
+        page.content = label;
+        return page;
+    };
+
+    try {
+        helper.navigate(pageFactory);
+        page.off(view.View.loadedEvent, loadedEventHandler);
+    }
+    finally {
+        helper.goBack();
+    }
+}
+
+export function test_WhenNavigatingForwardAndBack_IsBackNavigationIsCorrect() {
+    var page1;
+    var page2;
+    var forwardCounter = 0;
+    var backCounter = 0;
+    var loadedEventHandler = function (args: PageModule.NavigatedData) {
+        if (args.isBackNavigation) {
+            backCounter++;
+        }
+        else {
+            forwardCounter++;
+        }
+    }
+
+    var pageFactory1 = function (): PageModule.Page {
+        page1 = new PageModule.Page();
+        page1.on(PageModule.Page.navigatedToEvent, loadedEventHandler);
+        return page1;
+    };
+
+    var pageFactory2 = function (): PageModule.Page {
+        page2 = new PageModule.Page();
+        page2.on(PageModule.Page.navigatedToEvent, loadedEventHandler);
+        return page2;
+    };
+
+    try {
+        helper.navigate(pageFactory1);
+        helper.navigate(pageFactory2);
+        helper.goBack();
+        TKUnit.assertEqual(forwardCounter, 2, "Forward navigation counter should be 1");
+        TKUnit.assertEqual(backCounter, 1, "Backward navigation counter should be 1");
+        page1.off(PageModule.Page.navigatedToEvent, loadedEventHandler);
+        page2.off(PageModule.Page.navigatedToEvent, loadedEventHandler);
+    }
+    finally {
+        helper.goBack();
+    }
+}
+
+//export function test_ModalPage_Layout_is_Correct() {
+//    var testPage: PageModule.Page;
+//    var label: LabelModule.Label;
+//    var pageFactory = function () {
+//        testPage = new PageModule.Page();
+//        label = new LabelModule.Label();
+//        label.text = "Will Show modal page";
+//        testPage.content = label;
+//        return testPage;
+//    };
+
+//    helper.navigate(pageFactory);
+//    var basePath = "ui/page/";
+//    testPage.showModal(basePath + "page21", testPage, () => { }, false);
+
+//    // TODO: Remove this once navigate and showModal returns Promise<Page>.
+//    TKUnit.wait(0.350);
+//    var childPage = (<any>testPage).childPage;
+//    var closeCallback: Function = (<any>testPage).close;
+
+//    try {
+//        var layout = <stackLayoutModule.StackLayout>childPage.content;
+//        var repeater = layout.getChildAt(1);
+//        TKUnit.assertTrue(repeater.isLayoutValid, "layout should be valid.");
+//        var bounds = repeater._getCurrentLayoutBounds();
+//        var height = bounds.bottom - bounds.top;
+//        TKUnit.assertTrue(height > 0, "Layout should be >0.");
+
+//        closeCallback();
+//        TKUnit.wait(0.150);
+//    }
+//    finally {
+//        helper.goBack
+//        helper.goBack();
+//    }
+//}

@@ -1,4 +1,5 @@
 ﻿import TKUnit = require("../../TKUnit");
+import testRunner = require("../../testRunner");
 import helper = require("../helper");
 import viewModule = require("ui/core/view");
 import pagesModule = require("ui/page");
@@ -67,7 +68,24 @@ export var testSetText = function () {
         TKUnit.assert(actualValue === expectedValue, "Actual: " + actualValue + "; Expected: " + expectedValue);
     });    
 }
+/* tslint:disable */
+export var testSetHintToNumber = function () {
+    helper.buildUIAndRunTest(_createTextFieldFunc(), function (views: Array<viewModule.View>) {
+        var textField = <textFieldModule.TextField>views[0];
+        var expectedValue = 1;
 
+        // <snippet module="ui/text-field" title="TextField">
+        // ### Setting the text of a TextField
+        // ``` JavaScript
+        textField.hint = <any>expectedValue;
+        // ```
+        // </snippet>
+
+        var actualValue = textFieldTestsNative.getNativeHint(textField);
+        TKUnit.assert(<any>actualValue == expectedValue, "Actual: " + actualValue + "; Expected: " + expectedValue);
+    });
+}
+/* tslint:enable */
 export var testBindTextDirectlyToModel = function () {
     helper.buildUIAndRunTest(_createTextFieldFunc(), function (views: Array<viewModule.View>) {
         var textField = <textFieldModule.TextField>views[0];
@@ -409,8 +427,8 @@ export var testNativeTextAlignmentFromLocal = function () {
     });
 }
 
-export var testMemoryLeak = function () {
+export var testMemoryLeak = function (done) {
     helper.buildUIWithWeakRefAndInteract(_createTextFieldFunc, function (textField) {
         textFieldTestsNative.typeTextNatively(textField, "Hello, world!");
-    });
+    }, done);
 }

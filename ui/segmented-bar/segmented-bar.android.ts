@@ -1,12 +1,11 @@
 ﻿import definition = require("ui/segmented-bar");
-import common = require("ui/segmented-bar/segmented-bar-common");
+import common = require("./segmented-bar-common");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
 import types = require("utils/types");
+import observable = require("data/observable"); 
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 function onSelectedIndexPropertyChanged(data: dependencyObservable.PropertyChangeData) {
     var view = <SegmentedBar>data.object;
@@ -19,6 +18,7 @@ function onSelectedIndexPropertyChanged(data: dependencyObservable.PropertyChang
     if (types.isNumber(index)) {
         if (index >= 0 && index <= view.items.length - 1) {
             view.android.setCurrentTab(index);
+            view.notify({ eventName: SegmentedBar.selectedIndexChangedEvent, object: view, oldIndex: data.oldValue, newIndex: data.newValue });
         } else {
             view.selectedIndex = undefined;
             throw new Error("selectedIndex should be between [0, items.length - 1]");
@@ -33,6 +33,12 @@ function onItemsPropertyChanged(data: dependencyObservable.PropertyChangeData) {
         return;
     }
 
+    var oldItems = <Array<definition.SegmentedBarItem>>data.oldValue;
+    if (oldItems && oldItems.length) {
+        for (var i = 0; i < oldItems.length; i++) {
+            (<SegmentedBarItem>oldItems[i])._parent = null;
+        }
+    }
     view.android.clearAllTabs();
 
     var newItems = <Array<definition.SegmentedBarItem>>data.newValue;
@@ -41,10 +47,9 @@ function onItemsPropertyChanged(data: dependencyObservable.PropertyChangeData) {
 
     if (newItems && newItems.length) {
         for (var i = 0; i < newItems.length; i++) {
-            var title = newItems[i].title;
+            (<SegmentedBarItem>newItems[i])._parent = view;
             var tab = view.android.newTabSpec(i + "");
-
-            tab.setIndicator(title);
+            tab.setIndicator(newItems[i].title || "");
 
             tab.setContent(new android.widget.TabHost.TabContentFactory({
                 createTabContent: function (tag: string): android.view.View {
@@ -111,6 +116,19 @@ class SegmentedBarColorDrawable extends android.graphics.drawable.ColorDrawable 
     }
 }
 
+export class SegmentedBarItem extends common.SegmentedBarItem {
+    public _update() {
+        if (this._parent && this._parent.android) {
+            // TabHost.TabSpec.setIndicator DOES NOT WORK once the title has been set.
+            // http://stackoverflow.com/questions/2935781/modify-tab-indicator-dynamically-in-android
+            var tabIndex = this._parent.items.indexOf(this);
+            var titleTextViewId = 16908310; // http://developer.android.com/reference/android/R.id.html#title
+            var titleTextView = <android.widget.TextView>this._parent.android.getTabWidget().getChildAt(tabIndex).findViewById(titleTextViewId);
+            titleTextView.setText(this.title || "");
+        }
+    }
+}
+
 export class SegmentedBar extends common.SegmentedBar {
     private _android: OurTabHost;
     public _listener: android.widget.TabHost.OnTabChangeListener;
@@ -127,12 +145,7 @@ export class SegmentedBar extends common.SegmentedBar {
             onTabChanged: function (id: string) {
                 var bar = that.get();
                 if (bar) {
-                    var oldIndex = bar.selectedIndex;
-                    var newIndex = parseInt(id);
-
-                    if (oldIndex !== newIndex) {
-                        bar._onPropertyChangedFromNative(SegmentedBar.selectedIndexProperty, newIndex);
-                    }
+                    bar.selectedIndex = parseInt(id);
                 }
             }
         });

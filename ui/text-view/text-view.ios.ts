@@ -1,11 +1,9 @@
-﻿import common = require("ui/text-view/text-view-common");
+﻿import common = require("./text-view-common");
 import dependencyObservable = require("ui/core/dependency-observable");
 import textBase = require("ui/text-base");
 import enums = require("ui/enums");
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 class UITextViewDelegateImpl extends NSObject implements UITextViewDelegate {
     public static ObjCProtocols = [UITextViewDelegate];
@@ -44,17 +42,15 @@ class UITextViewDelegateImpl extends NSObject implements UITextViewDelegate {
 
 export class TextView extends common.TextView {
     private _ios: UITextView;
-    private _delegate: any;
+    private _delegate: UITextViewDelegateImpl;
 
     constructor() {
         super();
 
-        this._ios = UITextView.new();
+        this._ios = new UITextView();
         if (!this._ios.font) {
-            // For some reason font is null, not like stated in the docs.
             this._ios.font = UIFont.systemFontOfSize(12);
         }
-
         this._delegate = UITextViewDelegateImpl.new().initWithOwner(this);
     }
 

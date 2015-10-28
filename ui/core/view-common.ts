@@ -1,17 +1,40 @@
 ﻿import types = require("utils/types");
 import definition = require("ui/core/view");
 import proxy = require("ui/core/proxy");
-import style = require("ui/styling/style");
+import style = require("../styling/style");
 import styling = require("ui/styling");
 import visualStateConstants = require("ui/styling/visual-state-constants");
 import trace = require("trace");
 import dependencyObservable = require("ui/core/dependency-observable");
 import gestures = require("ui/gestures");
 import bindable = require("ui/core/bindable");
-import styleScope = require("ui/styling/style-scope");
+import styleScope = require("../styling/style-scope");
 import enums = require("ui/enums");
 import utils = require("utils/utils");
 import color = require("color");
+import animationModule = require("ui/animation");
+import observable = require("data/observable");
+import {registerSpecialProperty} from "ui/builder/special-properties";
+
+registerSpecialProperty("class", (instance: definition.View, propertyValue: string) => {
+    instance.className = propertyValue;
+});
+
+function getEventOrGestureName(name: string) : string {
+    return name.indexOf("on") === 0 ? name.substr(2, name.length - 2) : name;
+}
+
+export function isEventOrGesture(name: string, view: View): boolean {
+    if (types.isString(name)) {
+        var eventOrGestureName = getEventOrGestureName(name);
+        var evt = `${eventOrGestureName}Event`;
+
+        return view.constructor && evt in view.constructor ||
+            gestures.fromString(eventOrGestureName.toLowerCase()) !== undefined;
+    }
+
+    return false;
+}
 
 export function getViewById(view: View, id: string): View {
     if (!view) {
@@ -54,14 +77,21 @@ export function eachDescendant(view: definition.View, callback: (child: View) =>
     view._eachChildView(localCallback);
 }
 
-export function getAncestor(view: View, typeName: string): definition.View {
-    var parent = view.parent;
-
-    while (parent && parent.typeName !== typeName) {
-        parent = parent.parent;
+export function getAncestor(view: View, criterion: string | Function): definition.View {
+    let matcher: (view: definition.View) => boolean = null;
+    if (typeof criterion === "string") {
+        matcher = (view: definition.View) => view.typeName === criterion;
+    } else {
+        matcher = (view: definition.View) => view instanceof criterion;
     }
 
-    return parent;
+    for (let parent: definition.View = view.parent; parent != null; parent = parent.parent) {
+        if (matcher(parent)) {
+            return parent;
+        }
+    }
+
+    return null;
 }
 
 var viewIdCounter = 0;
@@ -87,6 +117,42 @@ var cssClassProperty = new dependencyObservable.Property(
     "cssClass",
     "View",
     new proxy.PropertyMetadata(undefined, dependencyObservable.PropertyMetadataSettings.AffectsStyle, onCssClassPropertyChanged)
+);
+
+var classNameProperty = new dependencyObservable.Property(
+    "className",
+    "View",
+    new proxy.PropertyMetadata(undefined, dependencyObservable.PropertyMetadataSettings.AffectsStyle, onCssClassPropertyChanged)
+);
+
+var translateXProperty = new dependencyObservable.Property(
+    "translateX",
+    "View",
+    new proxy.PropertyMetadata(0)
+    );
+
+var translateYProperty = new dependencyObservable.Property(
+    "translateY",
+    "View",
+    new proxy.PropertyMetadata(0)
+    );
+
+var scaleXProperty = new dependencyObservable.Property(
+    "scaleX",
+    "View",
+    new proxy.PropertyMetadata(1)
+    );
+
+var scaleYProperty = new dependencyObservable.Property(
+    "scaleY",
+    "View",
+    new proxy.PropertyMetadata(1)
+    );
+
+var rotateProperty = new dependencyObservable.Property(
+    "rotate",
+    "View",
+    new proxy.PropertyMetadata(0)
     );
 
 var isEnabledProperty = new dependencyObservable.Property(
@@ -107,6 +173,12 @@ export class View extends proxy.ProxyObject implements definition.View {
 
     public static idProperty = idProperty;
     public static cssClassProperty = cssClassProperty;
+    public static classNameProperty = classNameProperty;
+    public static translateXProperty = translateXProperty;
+    public static translateYProperty = translateYProperty;
+    public static scaleXProperty = scaleXProperty;
+    public static scaleYProperty = scaleYProperty;
+    public static rotateProperty = rotateProperty;
     public static isEnabledProperty = isEnabledProperty;
     public static isUserInteractionEnabledProperty = isUserInteractionEnabledProperty;
 
@@ -127,19 +199,16 @@ export class View extends proxy.ProxyObject implements definition.View {
     private _requestedVisualState: string;
     private _isLoaded: boolean;
     private _isLayoutValid: boolean = false;
+
     public _domId: number;
     public _isAddedToNativeVisualTree = false;
 
     public _cssClasses: Array<string> = [];
 
-    public _gestureObservers: Map<number, Array<gestures.GesturesObserver>>;
+    public _gestureObservers = {};
 
     public getGestureObservers(type: gestures.GestureTypes): Array<gestures.GesturesObserver> {
-        var result;
-        if (this._gestureObservers) {
-            result = this._gestureObservers.get(type) ? this._gestureObservers.get(type).slice(0) : undefined;
-        }
-        return result;
+        return this._gestureObservers[type];
     }
 
     private _updatingInheritedProperties: boolean;
@@ -157,29 +226,80 @@ export class View extends proxy.ProxyObject implements definition.View {
     }
 
     observe(type: gestures.GestureTypes, callback: (args: gestures.GestureEventData) => void, thisArg?: any): void {
-        var gesturesList = this._getGesturesList(type, true);
-        gesturesList.push(gestures.observe(this, type, callback, thisArg));
+        if (!this._gestureObservers[type]) {
+            this._gestureObservers[type] = [];
+        } 
+
+        this._gestureObservers[type].push(gestures.observe(this, type, callback, thisArg));
     }
 
-    private _getGesturesList(gestureType: number, createIfNeeded): Array<gestures.GesturesObserver> {
-        if (!gestureType) {
-            throw new Error("GestureType must be a valid gesture!");
-        }
+    public addEventListener(arg: string | gestures.GestureTypes, callback: (data: observable.EventData) => void, thisArg?: any) {
+        if (types.isString(arg)) {
 
-        var list: Array<gestures.GesturesObserver>;
-        if (this._gestureObservers && this._gestureObservers.has(gestureType)) {
-            list = this._gestureObservers.get(gestureType);
-        }
-        else {
-            if (createIfNeeded) {
-                list = [];
-                if (!this._gestureObservers) {
-                    this._gestureObservers = new Map<number, Array<gestures.GesturesObserver>>();
+            arg = getEventOrGestureName(<string>arg);
+
+            var gesture = gestures.fromString(<string>arg);
+            if (gesture && !this._isEvent(<string>arg)) {
+                this.observe(gesture, callback, thisArg);
+            } else {
+                var events = (<string>arg).split(",");
+                if (events.length > 0) {
+                    for (let i = 0; i < events.length; i++) {
+                        let evt = events[i].trim();
+                        let gst = gestures.fromString(evt);
+                        if (gst && !this._isEvent(<string>arg)) {
+                            this.observe(gst, callback, thisArg);
+                        } else {
+                            super.addEventListener(evt, callback, thisArg);
+                        }
+                    }
+                } else {
+                    super.addEventListener(<string>arg, callback, thisArg);
                 }
-                this._gestureObservers.set(gestureType, list);
+            }
+        } else if (types.isNumber(arg)) {
+            this.observe(<gestures.GestureTypes>arg, callback, thisArg);
+        }
+    }
+
+    public removeEventListener(arg: string | gestures.GestureTypes, callback?: any, thisArg?: any) {
+        if (types.isString(arg)) {
+            var gesture = gestures.fromString(<string>arg);
+            if (gesture && !this._isEvent(<string>arg)) {
+                this._disconnectGestureObservers(gesture);
+            } else {
+                var events = (<string>arg).split(",");
+                if (events.length > 0) {
+                    for (let i = 0; i < events.length; i++) {
+                        let evt = events[i].trim();
+                        let gst = gestures.fromString(evt);
+                        if (gst && !this._isEvent(<string>arg)) {
+                            this._disconnectGestureObservers(gst);
+                        } else {
+                            super.removeEventListener(evt, callback, thisArg);
+                        }
+                    }
+                } else {
+                    super.removeEventListener(<string>arg, callback, thisArg);
+                }
+
+            }
+        } else if (types.isNumber(arg)) {
+            this._disconnectGestureObservers(<gestures.GestureTypes>arg);
+        }
+    }
+
+    private _isEvent(name: string): boolean {
+        return this.constructor && `${name}Event` in this.constructor;
+    }
+
+    private _disconnectGestureObservers(type: gestures.GestureTypes): void {
+        var observers = this.getGestureObservers(type);
+        if (observers) {
+            for (let i = 0; i < observers.length; i++) {
+                observers[i].disconnect();
             }
         }
-        return list;
     }
 
     getViewById<T extends View>(id: string): T {
@@ -292,41 +412,6 @@ export class View extends proxy.ProxyObject implements definition.View {
         this.style.marginBottom = value;
     }
 
-    get padding(): string {
-        return this.style.padding;
-    }
-    set padding(value: string) {
-        this.style.padding = value;
-    }
-
-    get paddingLeft(): number {
-        return this.style.paddingLeft;
-    }
-    set paddingLeft(value: number) {
-        this.style.paddingLeft = value;
-    }
-
-    get paddingTop(): number {
-        return this.style.paddingTop;
-    }
-    set paddingTop(value: number) {
-        this.style.paddingTop = value;
-    }
-
-    get paddingRight(): number {
-        return this.style.paddingRight;
-    }
-    set paddingRight(value: number) {
-        this.style.paddingRight = value;
-    }
-
-    get paddingBottom(): number {
-        return this.style.paddingBottom;
-    }
-    set paddingBottom(value: number) {
-        this.style.paddingBottom = value;
-    }
-
     get horizontalAlignment(): string {
         return this.style.horizontalAlignment;
     }
@@ -357,11 +442,54 @@ export class View extends proxy.ProxyObject implements definition.View {
             
     //END Style property shortcuts
 
+    get translateX(): number {
+        return this._getValue(View.translateXProperty);
+    }
+    set translateX(value: number) {
+        this._setValue(View.translateXProperty, value);
+    }
+
+    get translateY(): number {
+        return this._getValue(View.translateYProperty);
+    }
+    set translateY(value: number) {
+        this._setValue(View.translateYProperty, value);
+    }
+
+    get scaleX(): number {
+        return this._getValue(View.scaleXProperty);
+    }
+    set scaleX(value: number) {
+        this._setValue(View.scaleXProperty, value);
+    }
+
+    get scaleY(): number {
+        return this._getValue(View.scaleYProperty);
+    }
+    set scaleY(value: number) {
+        this._setValue(View.scaleYProperty, value);
+    }
+
+    get rotate(): number {
+        return this._getValue(View.rotateProperty);
+    }
+    set rotate(value: number) {
+        this._setValue(View.rotateProperty, value);
+    }
+
     get isEnabled(): boolean {
         return this._getValue(View.isEnabledProperty);
     }
     set isEnabled(value: boolean) {
         this._setValue(View.isEnabledProperty, value);
+    }
+
+    get page(): definition.View {
+        if (this.parent) {
+            return this.parent.page;
+        }
+
+        return null;
     }
 
     get isUserInteractionEnabled(): boolean {
@@ -382,6 +510,13 @@ export class View extends proxy.ProxyObject implements definition.View {
         return this._getValue(View.cssClassProperty);
     }
     set cssClass(value: string) {
+        this._setValue(View.cssClassProperty, value);
+    }
+
+    get className(): string {
+        return this._getValue(View.cssClassProperty);
+    }
+    set className(value: string) {
         this._setValue(View.cssClassProperty, value);
     }
 
@@ -416,11 +551,9 @@ export class View extends proxy.ProxyObject implements definition.View {
     }
 
     public onLoaded() {
-        this._loadEachChildView();
-
-        this._applyStyleFromScope();
-
         this._isLoaded = true;
+        this._loadEachChildView();
+        this._applyStyleFromScope();
         this._emit("loaded");
     }
 
@@ -509,11 +642,11 @@ export class View extends proxy.ProxyObject implements definition.View {
     }
 
     public getMeasuredWidth(): number {
-        return this._measuredWidth;
+        return this._measuredWidth & utils.layout.MEASURED_SIZE_MASK;
     }
 
     public getMeasuredHeight(): number {
-        return this._measuredHeight;
+        return this._measuredHeight & utils.layout.MEASURED_SIZE_MASK;
     }
 
     public setMeasuredDimension(measuredWidth: number, measuredHeight: number): void {
@@ -586,7 +719,7 @@ export class View extends proxy.ProxyObject implements definition.View {
                 childTop = top + child.marginTop * density;
                 break;
 
-            case enums.VerticalAlignment.center:
+            case enums.VerticalAlignment.center || enums.VerticalAlignment.middle:
                 childTop = top + (bottom - top - childHeight + (child.marginTop - child.marginBottom) * density) / 2;
                 break;
 
@@ -721,13 +854,6 @@ export class View extends proxy.ProxyObject implements definition.View {
         return utils.layout.makeMeasureSpec(resultSize, resultMode);
     }
 
-    _getCurrentMeasureSpecs(): { widthMeasureSpec: number; heightMeasureSpec: number } {
-        return {
-            widthMeasureSpec: this._oldWidthMeasureSpec,
-            heightMeasureSpec: this._oldHeightMeasureSpec
-        };
-    }
-
     _setCurrentMeasureSpecs(widthMeasureSpec: number, heightMeasureSpec: number): boolean {
         var changed: boolean = this._oldWidthMeasureSpec !== widthMeasureSpec || this._oldHeightMeasureSpec !== heightMeasureSpec;
         this._oldWidthMeasureSpec = widthMeasureSpec;
@@ -750,7 +876,7 @@ export class View extends proxy.ProxyObject implements definition.View {
     }
 
     private _applyStyleFromScope() {
-        var rootPage = getAncestor(this, "Page");
+        var rootPage = this.page;
         if (!rootPage || !rootPage.isLoaded) {
             return;
         }
@@ -792,10 +918,6 @@ export class View extends proxy.ProxyObject implements definition.View {
     //@endandroid
 
     // TODO: We need to implement some kind of build step that includes these members only when building for iOS
-    //@ios
-    public _prepareNativeView(view: UIView) {
-        //
-    }
 
     //@endios
     get _childrenCount(): number {
@@ -810,17 +932,17 @@ export class View extends proxy.ProxyObject implements definition.View {
      * Core logic for adding a child view to this instance. Used by the framework to handle lifecycle events more centralized. Do not outside the UI Stack implementation.
      * // TODO: Think whether we need the base Layout routine.
      */
-    public _addView(view: View) {
+    public _addView(view: View, atIndex?: number) {
         if (!view) {
             throw new Error("Expecting a valid View instance.");
         }
 
         if (view._parent) {
-            throw new Error("View already has a parent.");
+            throw new Error("View already has a parent. View: " + view + " Parent: " + view._parent);
         }
 
         view._parent = this;
-        this._addViewCore(view);
+        this._addViewCore(view, atIndex);
 
         trace.write("called _addView on view " + this._domId + " for a child " + view._domId, trace.categories.ViewHierarchy);
     }
@@ -828,13 +950,13 @@ export class View extends proxy.ProxyObject implements definition.View {
     /**
      * Method is intended to be overridden by inheritors and used as "protected"
      */
-    public _addViewCore(view: View) {
+    public _addViewCore(view: View, atIndex?: number) {
         this._propagateInheritableProperties(view);
 
         view.style._inheritStyleProperties();
 
         if (!view._isAddedToNativeVisualTree) {
-            view._isAddedToNativeVisualTree = this._addViewToNativeVisualTree(view);
+            view._isAddedToNativeVisualTree = this._addViewToNativeVisualTree(view, atIndex);
         }
 
         // TODO: Discuss this.
@@ -870,7 +992,7 @@ export class View extends proxy.ProxyObject implements definition.View {
      */
     public _removeView(view: View) {
         if (view._parent !== this) {
-            throw new Error("View not added to this instance.");
+            throw new Error("View not added to this instance. View: " + view + " CurrentParent: " + view._parent + " ExpectedParent: " + this);
         }
 
         this._removeViewCore(view);
@@ -907,7 +1029,7 @@ export class View extends proxy.ProxyObject implements definition.View {
     /**
      * Method is intended to be overridden by inheritors and used as "protected".
      */
-    public _addViewToNativeVisualTree(view: View): boolean {
+    public _addViewToNativeVisualTree(view: View, atIndex?: number): boolean {
         if (view._isAddedToNativeVisualTree) {
             throw new Error("Child already added to the native visual tree.");
         }
@@ -952,6 +1074,14 @@ export class View extends proxy.ProxyObject implements definition.View {
         return false;
     }
 
+    public setInlineStyle(style: string): void {
+        if (!types.isString(style)) {
+            throw new Error("Parameter should be valid CSS string!");
+        }
+
+        this._applyInlineStyle(style);
+    }
+
     public _updateLayout() {
         // needed for iOS.
     }
@@ -964,7 +1094,22 @@ export class View extends proxy.ProxyObject implements definition.View {
         return this._isVisibleCache;
     }
 
+    public _shouldApplyStyleHandlers() {
+        // If we have native view we are ready to apply style handelr;
+        return !!this._nativeView;
+    }
+
     public focus(): boolean {
         return undefined;
+    }
+
+    public animate(animation: animationModule.AnimationDefinition): Promise<void> {
+        return this.createAnimation(animation).play();
+    }
+
+    public createAnimation(animation: animationModule.AnimationDefinition): animationModule.Animation {
+        var that = this;
+        animation.target = that;
+        return new animationModule.Animation([animation]);
     }
 }

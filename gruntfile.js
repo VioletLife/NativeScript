@@ -199,6 +199,8 @@ module.exports = function(grunt) {
                 src: [
                     "./js-libs/**/*.js",
                     "./fetch/**/*.js",
+                    "./css/**/*.js",
+                    "./css-value/**/*.js",
                 ],
                 dest: "<%= localCfg.outModulesDir %>/",
                 cwd: localCfg.srcDir
@@ -225,11 +227,13 @@ module.exports = function(grunt) {
                     "!" + localCfg.srcDir + "/apps/**"
                 ].concat(localCfg.defaultExcludes).concat(localCfg.excludedModules),
                 dest: localCfg.outDefinitionsDir + "/",
+                expand: true,
                 options: {
                     process: filterTypeScriptFiles
                 }
             },
             modulesPackageDef: {
+                expand: true,
                 src: localCfg.packageJsonFilePath,
                 dest: localCfg.outModulesDir + "/",
                 options: {
@@ -253,6 +257,7 @@ module.exports = function(grunt) {
                 }
             },
             childPackageFiles: {
+                expand: true,
                 src: [
                     localCfg.srcDir + "/**/package.json",
                     "!./package.json",
@@ -310,7 +315,9 @@ module.exports = function(grunt) {
                     declaration: false,
                     removeComments: "<%= !grunt.option('leavecomments') || '' %>",
                     compiler: "node_modules/typescript/bin/tsc",
-                    noEmitOnError: true
+                    noEmitOnError: true,
+                    experimentalDecorators: true,
+                    noEmitHelpers: true
                 }
             },
             buildNodeTests: {
@@ -512,6 +519,15 @@ module.exports = function(grunt) {
     ]);
 
     grunt.registerTask("default", ((typeof(grunt.option('runtslint')) != "undefined" && !grunt.option('runtslint')) ? [] : ["tslint:build"]).concat([
+        "just-build",
+		
+        "pack-apps",
+        "pack-ts-apps",
+        "pack-definitions",
+        "get-ready-packages"
+    ]));
+	
+    grunt.registerTask("just-build", ((typeof(grunt.option('runtslint')) != "undefined" && !grunt.option('runtslint')) ? [] : ["tslint:build"]).concat([
         "clean:build",
         "shell:getGitSHA",
 
@@ -524,12 +540,8 @@ module.exports = function(grunt) {
         "distribute-ts-apps-files",
         "distribute-definition-files",
 
-        "pack-modules",
-        "pack-apps",
-        "pack-ts-apps",
-        "pack-definitions",
-        "get-ready-packages"
-    ]));
+        "pack-modules"
+    ]));	
 
     grunt.registerTask("testEnv", function() {
         console.log('fafla', process.env.NODE_PATH);

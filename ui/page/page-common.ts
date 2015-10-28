@@ -1,22 +1,24 @@
-﻿import contentView = require("ui/content-view");
+﻿import {ContentView} from "ui/content-view";
 import view = require("ui/core/view");
 import dts = require("ui/page");
 import frame = require("ui/frame");
-import styleScope = require("ui/styling/style-scope");
+import styleModule = require("../styling/style");
+import styleScope = require("../styling/style-scope");
 import fs = require("file-system");
-import fileSystemAccess = require("file-system/file-system-access");
-import frameCommon = require("ui/frame/frame-common");
-import actionBar = require("ui/action-bar");
-import dependencyObservable = require("ui/core/dependency-observable");
+import frameCommon = require("../frame/frame-common");
+import {ActionBar} from "ui/action-bar";
+import {DependencyObservable, PropertyMetadata, PropertyMetadataSettings, PropertyChangeData, Property, ValueSource} from "ui/core/dependency-observable";
+
 import proxy = require("ui/core/proxy");
 
-var actionBarHiddenProperty = new dependencyObservable.Property(
-    "actionBarHidden",
-    "Page",
-    new proxy.PropertyMetadata(undefined, dependencyObservable.PropertyMetadataSettings.AffectsLayout)
-    );
+// on Android we explicitly set propertySettings to None because android will invalidate its layout (skip unnecessary native call).
+var AffectsLayout = global.android ? PropertyMetadataSettings.None : PropertyMetadataSettings.AffectsLayout;
 
-function onActionBarHiddenPropertyChanged(data: dependencyObservable.PropertyChangeData) {
+var backgroundSpanUnderStatusBarProperty = new Property("backgroundSpanUnderStatusBar", "Page", new proxy.PropertyMetadata(false, AffectsLayout));
+
+var actionBarHiddenProperty = new Property("actionBarHidden", "Page", new proxy.PropertyMetadata(undefined, AffectsLayout));
+
+function onActionBarHiddenPropertyChanged(data: PropertyChangeData) {
     var page = <Page>data.object;
     if (page.isLoaded) {
         page._updateActionBar(data.newValue);
@@ -25,7 +27,8 @@ function onActionBarHiddenPropertyChanged(data: dependencyObservable.PropertyCha
 
 (<proxy.PropertyMetadata>actionBarHiddenProperty.metadata).onSetNativeValue = onActionBarHiddenPropertyChanged;
 
-export class Page extends contentView.ContentView implements dts.Page {
+export class Page extends ContentView implements dts.Page {
+    public static backgroundSpanUnderStatusBarProperty = backgroundSpanUnderStatusBarProperty;
     public static actionBarHiddenProperty = actionBarHiddenProperty;
     public static navigatingToEvent = "navigatingTo";
     public static navigatedToEvent = "navigatedTo";
@@ -33,20 +36,27 @@ export class Page extends contentView.ContentView implements dts.Page {
     public static navigatedFromEvent = "navigatedFrom";
     public static shownModallyEvent = "shownModally";
 
+    protected _closeModalCallback: Function;
+
     private _navigationContext: any;
 
     private _cssApplied: boolean;
     private _styleScope: styleScope.StyleScope = new styleScope.StyleScope();
-    private _actionBar: actionBar.ActionBar;
+    private _actionBar: ActionBar;
+
+    private _modal: Page;
 
     constructor(options?: dts.Options) {
         super(options);
-        this.actionBar = new actionBar.ActionBar();
+        this.actionBar = new ActionBar();
     }
 
     public onLoaded() {
-        this._applyCss();
+        // The default style of the page should be white background
+        this.style._setValue(styleModule.backgroundColorProperty, "white", ValueSource.Inherited);
 
+        this._applyCss();
+        
         if (this.actionBarHidden !== undefined) {
             this._updateActionBar(this.actionBarHidden);
         }
@@ -54,6 +64,14 @@ export class Page extends contentView.ContentView implements dts.Page {
         super.onLoaded();
     }
 
+    get backgroundSpanUnderStatusBar(): boolean {
+        return this._getValue(Page.backgroundSpanUnderStatusBarProperty);
+    }
+
+    set backgroundSpanUnderStatusBar(value: boolean) {
+        this._setValue(Page.backgroundSpanUnderStatusBarProperty, value);
+    }
+    
     get actionBarHidden(): boolean {
         return this._getValue(Page.actionBarHiddenProperty);
     }
@@ -81,10 +99,10 @@ export class Page extends contentView.ContentView implements dts.Page {
         this._refreshCss();
     }
 
-    get actionBar(): actionBar.ActionBar {
+    get actionBar(): ActionBar {
         return this._actionBar;
     }
-    set actionBar(value: actionBar.ActionBar) {
+    set actionBar(value: ActionBar) {
         if (!value) {
             throw new Error("ActionBar cannot be null or undefined.");
         }
@@ -98,6 +116,10 @@ export class Page extends contentView.ContentView implements dts.Page {
             this._actionBar.page = this;
             this._addView(this._actionBar);
         }
+    }
+
+    get page(): view.View {
+        return this;
     }
 
     private _refreshCss(): void {
@@ -127,10 +149,12 @@ export class Page extends contentView.ContentView implements dts.Page {
         }
         if (!this._cssFiles[cssFileName]) {
             if (fs.File.exists(cssFileName)) {
-                new fileSystemAccess.FileSystemAccess().readText(cssFileName, r => {
-                    this._addCssInternal(r, cssFileName);
+                var file = fs.File.fromPath(cssFileName);
+                var text = file.readTextSync();
+                if (text) {
+                    this._addCssInternal(text, cssFileName);
                     this._cssFiles[cssFileName] = true;
-                });
+                }
             }
         }
     }
@@ -139,49 +163,60 @@ export class Page extends contentView.ContentView implements dts.Page {
         return <frame.Frame>this.parent;
     }
 
-    public onNavigatingTo(context: any) {
+    private createNavigatedData(eventName: string, isBackNavigation: boolean): dts.NavigatedData {
+        return {
+            eventName: eventName,
+            object: this,
+            context: this.navigationContext,
+            isBackNavigation: isBackNavigation
+        };
+    }
+
+    public onNavigatingTo(context: any, isBackNavigation: boolean) {
         this._navigationContext = context;
-
-        this.notify({
-            eventName: Page.navigatingToEvent,
-            object: this,
-            context: this.navigationContext
-        });
+        this.notify(this.createNavigatedData(Page.navigatingToEvent, isBackNavigation));
     }
 
-    public onNavigatedTo() {
-        this.notify({
-            eventName: Page.navigatedToEvent,
-            object: this,
-            context: this.navigationContext
-        });
+    public onNavigatedTo(isBackNavigation: boolean) {
+        this.notify(this.createNavigatedData(Page.navigatedToEvent, isBackNavigation));
     }
 
-    public onNavigatingFrom() {
-        this.notify({
-            eventName: Page.navigatingFromEvent,
-            object: this,
-            context: this.navigationContext
-        });
+    public onNavigatingFrom(isBackNavigation: boolean) {
+        this.notify(this.createNavigatedData(Page.navigatingFromEvent, isBackNavigation));
     }
 
     public onNavigatedFrom(isBackNavigation: boolean) {
-        this.notify({
-            eventName: Page.navigatedFromEvent,
-            object: this,
-            context: this.navigationContext
-        });
+        this.notify(this.createNavigatedData(Page.navigatedFromEvent, isBackNavigation));
 
         this._navigationContext = undefined;
     }
 
-    public showModal(moduleName: string, context: any, closeCallback: Function, fullscreen?: boolean) {
-        var page = frameCommon.resolvePageFromEntry({ moduleName: moduleName });
-        (<Page>page)._showNativeModalView(this, context, closeCallback, fullscreen);
+    public showModal() {
+        if (arguments.length === 0) {
+            this._showNativeModalView(<any>frame.topmost().currentPage, undefined, undefined, true);
+        } else {
+            var moduleName: string = arguments[0];
+            var context: any = arguments[1];
+            var closeCallback: Function = arguments[2];
+            var fullscreen: boolean = arguments[3];
+
+            var page = frameCommon.resolvePageFromEntry({ moduleName: moduleName });
+            (<Page>page)._showNativeModalView(this, context, closeCallback, fullscreen);
+        }
+    }
+
+    public closeModal() {
+        if (this._closeModalCallback) {
+            this._closeModalCallback.apply(undefined, arguments);
+        }
+    }
+
+    public get modal(): Page {
+        return this._modal;
     }
 
     public _addChildFromBuilder(name: string, value: any) {
-        if (value instanceof actionBar.ActionBar) {
+        if (value instanceof ActionBar) {
             this.actionBar = value;
         }
         else {
@@ -190,25 +225,29 @@ export class Page extends contentView.ContentView implements dts.Page {
     }
 
     protected _showNativeModalView(parent: Page, context: any, closeCallback: Function, fullscreen?: boolean) {
-        //
+        parent._modal = this;
+        var that = this;
+        this._closeModalCallback = function () {
+            if (that._closeModalCallback) {
+                that._closeModalCallback = null;
+                that._hideNativeModalView(parent);
+                if (typeof closeCallback === "function") {
+                    closeCallback.apply(undefined, arguments);
+                }
+            }
+        };
     }
 
     protected _hideNativeModalView(parent: Page) {
-        //
+        parent._modal = undefined;
     }
 
     protected _raiseShownModallyEvent(parent: Page, context: any, closeCallback: Function) {
-        var that = this;
-        var closeProxy = function () {
-            that._hideNativeModalView(parent);
-            closeCallback.apply(undefined, arguments);
-        };
-
         this.notify({
             eventName: Page.shownModallyEvent,
             object: this,
             context: context,
-            closeCallback: closeProxy
+            closeCallback: this._closeModalCallback
         });
     }
 
@@ -249,14 +288,5 @@ export class Page extends contentView.ContentView implements dts.Page {
 
         resetCssValuesFunc(this);
         view.eachDescendant(this, resetCssValuesFunc);
-    }
-
-    public _addViewToNativeVisualTree(view: view.View): boolean {
-        // ActionBar is added to the native visual tree by default
-        if (view === this.actionBar) {
-            return true;
-        }
-
-        return super._addViewToNativeVisualTree(view);
     }
 }

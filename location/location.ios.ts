@@ -1,10 +1,8 @@
 ﻿import enums = require("ui/enums");
 import locationModule = require("location");
-import common = require("location/location-common");
+import common = require("./location-common");
 
-import merger = require("utils/module-merge");
-declare var exports;
-merger.merge(common, exports);
+global.moduleMerge(common, exports);
 
 class LocationListenerImpl extends NSObject implements CLLocationManagerDelegate {
     public static ObjCProtocols = [CLLocationManagerDelegate];

@@ -1,9 +1,8 @@
 import viewModule = require("ui/core/view");
-import style = require("ui/styling/style");
-import common = require("ui/styling/background-common");
+import style = require("./style");
+import common = require("./background-common");
 
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 export module ios {
     export function createBackgroundUIColor(view: viewModule.View): UIColor {
@@ -33,7 +32,7 @@ export module ios {
                     UIGraphicsEndImageContext();
                 }
 
-                UIGraphicsBeginImageContextWithOptions(frame.size, false, 1.0);
+                UIGraphicsBeginImageContextWithOptions(frame.size, false, 0.0);
                 var context = UIGraphicsGetCurrentContext();
 
                 if (background.color && background.color.ios) {

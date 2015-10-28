@@ -1,13 +1,12 @@
-﻿import viewCommon = require("ui/core/view-common");
+﻿import viewCommon = require("./view-common");
 import trace = require("trace");
 import utils = require("utils/utils");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
 import background = require("ui/styling/background");
+import types = require("utils/types");
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(viewCommon, exports);
+global.moduleMerge(viewCommon, exports);
 
 function onIdPropertyChanged(data: dependencyObservable.PropertyChangeData) {
     var view = <View>data.object;
@@ -18,6 +17,66 @@ function onIdPropertyChanged(data: dependencyObservable.PropertyChangeData) {
     view._nativeView.accessibilityIdentifier = data.newValue;
 }
 (<proxy.PropertyMetadata>viewCommon.View.idProperty.metadata).onSetNativeValue = onIdPropertyChanged;
+
+function onTranslateXPropertyChanged(data: dependencyObservable.PropertyChangeData) {
+    var view = <View>data.object;
+    var newTransform = CGAffineTransformIdentity;
+    newTransform = CGAffineTransformTranslate(newTransform, data.newValue, view.translateY);
+    newTransform = CGAffineTransformRotate(newTransform, view.rotate * Math.PI / 180);
+    newTransform = CGAffineTransformScale(newTransform, view.scaleX, view.scaleY);
+    if (!CGAffineTransformEqualToTransform(view._nativeView.transform, newTransform)) {
+        view._nativeView.transform = newTransform;
+    }
+}
+(<proxy.PropertyMetadata>viewCommon.View.translateXProperty.metadata).onSetNativeValue = onTranslateXPropertyChanged;
+
+function onTranslateYPropertyChanged(data: dependencyObservable.PropertyChangeData) {
+    var view = <View>data.object;
+    var newTransform = CGAffineTransformIdentity;
+    newTransform = CGAffineTransformTranslate(newTransform, view.translateX, data.newValue);
+    newTransform = CGAffineTransformRotate(newTransform, view.rotate * Math.PI / 180);
+    newTransform = CGAffineTransformScale(newTransform, view.scaleX, view.scaleY);
+    if (!CGAffineTransformEqualToTransform(view._nativeView.transform, newTransform)) {
+        view._nativeView.transform = newTransform;
+    }
+}
+(<proxy.PropertyMetadata>viewCommon.View.translateYProperty.metadata).onSetNativeValue = onTranslateYPropertyChanged;
+
+function onScaleXPropertyChanged(data: dependencyObservable.PropertyChangeData) {
+    var view = <View>data.object;
+    var newTransform = CGAffineTransformIdentity;
+    newTransform = CGAffineTransformTranslate(newTransform, view.translateX, view.translateY);
+    newTransform = CGAffineTransformRotate(newTransform, view.rotate * Math.PI / 180);
+    newTransform = CGAffineTransformScale(newTransform, data.newValue, view.scaleY);
+    if (!CGAffineTransformEqualToTransform(view._nativeView.transform, newTransform)) {
+        view._nativeView.transform = newTransform;
+    }
+}
+(<proxy.PropertyMetadata>viewCommon.View.scaleXProperty.metadata).onSetNativeValue = onScaleXPropertyChanged;
+
+function onScaleYPropertyChanged(data: dependencyObservable.PropertyChangeData) {
+    var view = <View>data.object;
+    var newTransform = CGAffineTransformIdentity;
+    newTransform = CGAffineTransformTranslate(newTransform, view.translateX, view.translateY);
+    newTransform = CGAffineTransformRotate(newTransform, view.rotate * Math.PI / 180);
+    newTransform = CGAffineTransformScale(newTransform, view.scaleX, data.newValue);
+    if (!CGAffineTransformEqualToTransform(view._nativeView.transform, newTransform)) {
+        view._nativeView.transform = newTransform;
+    }
+}
+(<proxy.PropertyMetadata>viewCommon.View.scaleYProperty.metadata).onSetNativeValue = onScaleYPropertyChanged;
+
+function onRotatePropertyChanged(data: dependencyObservable.PropertyChangeData) {
+    var view = <View>data.object;
+    var newTransform = CGAffineTransformIdentity;
+    newTransform = CGAffineTransformTranslate(newTransform, view.translateX, view.translateY);
+    newTransform = CGAffineTransformRotate(newTransform, data.newValue * Math.PI / 180);
+    newTransform = CGAffineTransformScale(newTransform, view.scaleX, view.scaleY);
+    if (!CGAffineTransformEqualToTransform(view._nativeView.transform, newTransform)) {
+        view._nativeView.transform = newTransform;
+    }
+}
+(<proxy.PropertyMetadata>viewCommon.View.rotateProperty.metadata).onSetNativeValue = onRotatePropertyChanged;
 
 function onIsEnabledPropertyChanged(data: dependencyObservable.PropertyChangeData) {
     var view = <View>data.object;
@@ -83,17 +142,17 @@ export class View extends viewCommon.View {
         return this.ios;
     }
 
-    public _prepareNativeView(view: UIView) {
-        // For UILabel and UIImage.
-        view.userInteractionEnabled = true;
+    get isLayoutRequested(): boolean {
+        return (this._privateFlags & PFLAG_FORCE_LAYOUT) === PFLAG_FORCE_LAYOUT;
     }
 
     public requestLayout(): void {
         super.requestLayout();
         this._privateFlags |= PFLAG_FORCE_LAYOUT;
 
-        if (this.parent) {
-            this.parent.requestLayout();
+        var parent = <View>this.parent;
+        if (parent && !parent.isLayoutRequested) {
+            parent.requestLayout();
         }
     }
 
@@ -137,8 +196,10 @@ export class View extends viewCommon.View {
 
     public onMeasure(widthMeasureSpec: number, heightMeasureSpec: number): void {
         var view = this._nativeView;
-        if (view) {
+        let nativeWidth = 0;
+        let nativeHeight = 0;
 
+        if (view) {
             var width = utils.layout.getMeasureSpecSize(widthMeasureSpec);
             var widthMode = utils.layout.getMeasureSpecMode(widthMeasureSpec);
 
@@ -153,22 +214,22 @@ export class View extends viewCommon.View {
                 height = Number.POSITIVE_INFINITY;
             }
 
-            trace.write(this + " :onMeasure: " + utils.layout.getMode(widthMode) + " " + width + ", " + utils.layout.getMode(heightMode) + " " + height, trace.categories.Layout);
-
             var nativeSize = view.sizeThatFits(CGSizeMake(width, height));
-
-            var measureWidth = Math.max(nativeSize.width, this.minWidth);
-            var measureHeight = Math.max(nativeSize.height, this.minHeight);
-
-            var widthAndState = View.resolveSizeAndState(measureWidth, width, widthMode, 0);
-            var heightAndState = View.resolveSizeAndState(measureHeight, height, heightMode, 0);
-
-            this.setMeasuredDimension(widthAndState, heightAndState);
+            nativeWidth = nativeSize.width;
+            nativeHeight = nativeSize.height;
         }
+
+        var measureWidth = Math.max(nativeWidth, this.minWidth);
+        var measureHeight = Math.max(nativeHeight, this.minHeight);
+
+        var widthAndState = View.resolveSizeAndState(measureWidth, width, widthMode, 0);
+        var heightAndState = View.resolveSizeAndState(measureHeight, height, heightMode, 0);
+
+        this.setMeasuredDimension(widthAndState, heightAndState);
     }
 
     public onLayout(left: number, top: number, right: number, bottom: number): void {
-        trace.write(this + " :onLayout: " + left + ", " + top + ", " + (right - left) + ", " + (bottom - top), trace.categories.Layout);
+        //
     }
 
     public layoutNativeView(left: number, top: number, right: number, bottom: number): void {
@@ -183,7 +244,7 @@ export class View extends viewCommon.View {
         // When in landscape in iOS 7 there is transformation on the first subview of the window so we set frame to its subview.
         // in iOS 8 we set frame to subview again otherwise we get clipped.
         var nativeView: UIView;
-        if (!this.parent && this._nativeView.subviews.count > 0 && !(<any>this)._isModal) {
+        if (!this.parent && this._nativeView.subviews.count > 0 && utils.ios.MajorVersion < 8) {
             trace.write(this + " has no parent. Setting frame to first child instead.", trace.categories.Layout);
             nativeView = (<UIView>this._nativeView.subviews[0]);
         }
@@ -194,6 +255,8 @@ export class View extends viewCommon.View {
         if (!CGRectEqualToRect(nativeView.frame, frame)) {
             trace.write(this + ", Native setFrame: = " + NSStringFromCGRect(frame), trace.categories.Layout);
             nativeView.frame = frame;
+            var boundsOrigin = nativeView.bounds.origin;
+            nativeView.bounds = CGRectMake(boundsOrigin.x, boundsOrigin.y, frame.size.width, frame.size.height);
         }
     }
 
@@ -211,10 +274,7 @@ export class View extends viewCommon.View {
     }
 
     private _onBoundsChanged() {
-        var bgColor = background.ios.createBackgroundUIColor(this);
-        if (bgColor) {
-            this._nativeView.backgroundColor = bgColor;
-        }
+        this.style._boundsChanged();
     }
 }
 
@@ -224,9 +284,7 @@ export class CustomLayoutView extends View {
 
     constructor() {
         super();
-
         this._view = new UIView();
-        this._view.autoresizesSubviews = false;
     }
 
     get ios(): UIView {
@@ -238,21 +296,20 @@ export class CustomLayoutView extends View {
     }
 
     public onMeasure(widthMeasureSpec: number, heightMeasureSpec: number): void {
-        // Don't call super because it will trigger measure again.
-
-        var width = utils.layout.getMeasureSpecSize(widthMeasureSpec);
-        var widthMode = utils.layout.getMeasureSpecMode(widthMeasureSpec);
-
-        var height = utils.layout.getMeasureSpecSize(heightMeasureSpec);
-        var heightMode = utils.layout.getMeasureSpecMode(heightMeasureSpec);
-        trace.write(this + " :onMeasure: " + utils.layout.getMode(widthMode) + " " + width + ", " + utils.layout.getMode(heightMode) + " " + height, trace.categories.Layout);
+        // Don't call super because it will set MeasureDimension. This method must be overriden and calculate its measuredDimensions.
     }
 
-    public _addViewToNativeVisualTree(child: View): boolean {
+    public _addViewToNativeVisualTree(child: View, atIndex: number): boolean {
         super._addViewToNativeVisualTree(child);
 
         if (this._nativeView && child._nativeView) {
-            this._nativeView.addSubview(child._nativeView);
+            if (types.isNullOrUndefined(atIndex) || atIndex >= this._nativeView.subviews.count) {
+                this._nativeView.addSubview(child._nativeView);
+            }
+            else {
+                this._nativeView.insertSubviewAtIndex(child._nativeView, atIndex);
+            }
+
             return true;
         }
 

@@ -1,7 +1,8 @@
-﻿import common = require("ui/date-picker/date-picker-common");
+﻿import common = require("./date-picker-common");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
 import types = require("utils/types");
+import utils = require("utils/utils")
 
 function onYearPropertyChanged(data: dependencyObservable.PropertyChangeData) {
     var picker = <DatePicker>data.object;
@@ -63,9 +64,7 @@ function onMinDatePropertyChanged(data: dependencyObservable.PropertyChangeData)
 
 (<proxy.PropertyMetadata>common.DatePicker.minDateProperty.metadata).onSetNativeValue = onMinDatePropertyChanged;
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 export class DatePicker extends common.DatePicker {
     private _android: android.widget.DatePicker;
@@ -80,7 +79,8 @@ export class DatePicker extends common.DatePicker {
 
         var that = new WeakRef(this);
 
-        this._listener = new android.widget.DatePicker.OnDateChangedListener({
+        this._listener = new android.widget.DatePicker.OnDateChangedListener(
+            <utils.Owned & android.widget.DatePicker.IOnDateChangedListener>{
             get owner() {
                 return that.get();
             },

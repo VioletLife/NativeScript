@@ -1,7 +1,7 @@
 ﻿/* tslint:disable:class-name */
 import definition = require("platform");
 import enums = require("ui/enums");
-import application = require("application");
+import utils = require("utils/utils");
 
 export module platformNames {
     export var android = "Android";
@@ -75,11 +75,11 @@ export class device implements definition.device {
     static get uuid(): string {
         if (!device._uuid) {
             device._uuid = android.provider.Settings.Secure.getString(
-              application.android.context.getContentResolver(),
-              android.provider.Settings.Secure.ANDROID_ID
-            );
+                utils.ad.getApplicationContext().getContentResolver(),
+                android.provider.Settings.Secure.ANDROID_ID
+                );
         }
-        
+
         return device._uuid;
     }
 
@@ -87,27 +87,44 @@ export class device implements definition.device {
         if (!device._language) {
             device._language = java.util.Locale.getDefault().toString();
         }
-        
+
         return device._language;
     }
 }
 
-var mainScreenInfo: definition.ScreenMetrics;
+var mainScreen: MainScreen;
 
-// This is a "static" class and it is used like a name-space.
+// This is a "static" class and it is used like a namespace.
 // It is not meant to be initialized - thus it is not capitalized
 export class screen implements definition.screen {
     static get mainScreen(): definition.ScreenMetrics {
-        if (!mainScreenInfo) {
-            var metrics = application.android.context.getResources().getDisplayMetrics();
-            mainScreenInfo = {
-                widthPixels: metrics.widthPixels,
-                heightPixels: metrics.heightPixels,
-                scale: metrics.density,
-                widthDIPs: metrics.widthPixels / metrics.density,
-                heightDIPs: metrics.heightPixels / metrics.density
-            }
+        if (!mainScreen) {
+            var metrics = utils.ad.getApplicationContext().getResources().getDisplayMetrics();
+            mainScreen = new MainScreen(metrics);
         }
-        return mainScreenInfo;
+        return mainScreen;
+    }
+}
+
+class MainScreen implements definition.ScreenMetrics {
+    private _metrics: android.util.DisplayMetrics;
+    constructor(metrics: android.util.DisplayMetrics) {
+        this._metrics = metrics;
+    }
+
+    get widthPixels(): number {
+        return this._metrics.widthPixels;
+    }
+    get heightPixels(): number {
+        return this._metrics.heightPixels;
+    }
+    get scale(): number {
+        return this._metrics.density;
+    }
+    get widthDIPs(): number {
+        return this._metrics.widthPixels / this._metrics.density;
+    }
+    get heightDIPs(): number {
+        return this._metrics.heightPixels / this._metrics.density;
     }
 }

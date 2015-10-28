@@ -1,19 +1,15 @@
 ﻿import appModule = require("application");
-import common = require("connectivity/connectivity-common");
+import common = require("./connectivity-common");
+import utils = require("utils/utils");
 
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 var WIFI = "WIFI";
 var MOBILE = "MOBILE";
 
 // Get Connection Type
 function getConnectivityManager(): android.net.ConnectivityManager {
-    if (!appModule.android || !appModule.android.context) {
-        return null;
-    }
-
-    return appModule.android.context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
+    return utils.ad.getApplicationContext().getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
 }
 
 function getActiveNetworkInfo(): android.net.NetworkInfo {
@@ -40,7 +36,7 @@ export function getConnectionType(): number {
     }
 }
 
-export function starMonitoring(connectionTypeChangedCallback: (newConnectionType: number) => void): void {
+export function startMonitoring(connectionTypeChangedCallback: (newConnectionType: number) => void): void {
     var onReceiveCallback = function onReceiveCallback(context: android.content.Context, intent: android.content.Intent) {
         var newConnectionType = getConnectionType();
         connectionTypeChangedCallback(newConnectionType);

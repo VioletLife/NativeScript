@@ -4,6 +4,9 @@ import helper = require("../helper");
 import builder = require("ui/builder");
 import button = require("ui/button");
 import PageModule = require("ui/page");
+import viewModule = require("ui/core/view");
+import fs = require("file-system");
+import { Observable } from "data/observable";
 
 // <snippet module="ui/action-bar" title="ActionBar">
 // # ActionBar
@@ -171,6 +174,38 @@ export function test_titleView_inXML_short_definition() {
     TKUnit.assert(centerBtn instanceof button.Button, "cneterView not loaded correctly");
 };
 
+export function test_ActionBarItemBindingToEvent() {
+    var p = <PageModule.Page>builder.parse('<Page><Page.actionBar><ActionBar><ActionBar.actionItems><ActionItem tap="{{ test }}"/></ActionBar.actionItems></ActionBar></Page.actionBar></Page>');
+
+    var testAction = function (views: Array<viewModule.View>) {
+        var page = <PageModule.Page>views[0];
+        var firstHandlerCallCounter = 0;
+        var secondHandlerCallCounter = 0;
+        var firstHandler = function () { firstHandlerCallCounter++; };
+        var secondHandler = function () { secondHandlerCallCounter++; };
+
+        page.bindingContext = new Observable({ "test": firstHandler });
+
+        var actionBarItem = page.actionBar.actionItems.getItemAt(0);
+
+        TKUnit.assertEqual((<any>actionBarItem)._observers["tap"].length, 1, "There should be only one listener");
+        TKUnit.assertEqual((<any>actionBarItem)._observers["tap"][0].callback + "", "function () { firstHandlerCallCounter++; }", "First handler is not equal");
+
+        p.bindingContext.set("test", secondHandler);
+
+        TKUnit.assertEqual((<any>actionBarItem)._observers["tap"].length, 1, "There should be only one listener");
+        TKUnit.assertEqual((<any>actionBarItem)._observers["tap"][0].callback + "", "function () { secondHandlerCallCounter++; }", "Second handler is not equal");
+    }
+
+    helper.navigate(function () { return p; });
+    try {
+        testAction([p]);
+    }
+    finally {
+        helper.goBack();
+    }
+}
+
 export function test_Setting_ActionItems_doesnt_thrown() {
 
     var page: PageModule.Page;
@@ -191,6 +226,27 @@ export function test_Setting_ActionItems_doesnt_thrown() {
 
     try {
         helper.navigate(pageFactory);
+    }
+    catch (e) {
+        gotException = true;
+    }
+
+    try {
+        TKUnit.assert(!gotException, "Expected: false, Actual: " + gotException);
+    }
+    finally {
+        helper.goBack();
+    }
+}
+
+export function test_Setting_ActionItemsWithNumberAsText_doesnt_thrown() {
+
+    var gotException = false;
+
+    var moduleName = __dirname.substr(fs.knownFolders.currentApp().path.length);
+
+    try {
+        helper.navigateToModule(moduleName + "/ActionBar_NumberAsText");
     }
     catch (e) {
         gotException = true;

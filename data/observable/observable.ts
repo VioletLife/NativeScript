@@ -15,29 +15,27 @@ export class Observable implements definition.Observable {
     constructor(json?: any) {
         if (json) {
             this._map = new Map<string, Object>();
-            var that = this;
-
-            var definePropertyFunc = function definePropertyFunc(propertyName) {
-                Object.defineProperty(Observable.prototype, propertyName, {
-                    get: function () {
-                        return that._map.get(propertyName);
-                    },
-                    set: function (value) {
-                        that._map.set(propertyName, value);
-                        that.notify(that._createPropertyChangeData(propertyName, value));
-                    },
-                    enumerable: true,
-                    configurable: true
-                });
-            };
-
             for (var prop in json) {
                 if (json.hasOwnProperty(prop)) {
-                    definePropertyFunc(prop);
+                    this._defineNewProperty(prop);
                     this.set(prop, json[prop]);
                 }
             }
         }
+    }
+
+    private _defineNewProperty(propertyName: string): void {
+        Object.defineProperty(this, propertyName, {
+            get: function () {
+                return this._map.get(propertyName);
+            },
+            set: function (value) {
+                this._map.set(propertyName, value);
+                this.notify(this._createPropertyChangeData(propertyName, value));
+            },
+            enumerable: true,
+            configurable: true
+        });
     }
 
     get typeName(): string {
@@ -53,7 +51,12 @@ export class Observable implements definition.Observable {
     }
 
     public addEventListener(eventNames: string, callback: (data: definition.EventData) => void, thisArg?: any) {
+        if (!types.isString(eventNames)) {
+            throw new TypeError("Events name(s) must be string.");
+        }
+
         types.verifyCallback(callback);
+
         var events: Array<string> = eventNames.split(",");
 
         for (var i = 0, l = events.length; i < l; i++) {
@@ -68,6 +71,10 @@ export class Observable implements definition.Observable {
     }
 
     public removeEventListener(eventNames: string, callback?: any, thisArg?: any) {
+        if (!types.isString(eventNames)) {
+            throw new TypeError("Events name(s) must be string.");
+        }
+
         var events: Array<string> = eventNames.split(",");
 
         for (var i = 0, l = events.length; i < l; i++) {
@@ -91,6 +98,10 @@ export class Observable implements definition.Observable {
         }
     }
 
+    public notifyPropertyChange(propertyName: string, newValue: any) {
+        this.notify(this._createPropertyChangeData(propertyName, newValue));
+    }
+
     public set(name: string, value: any) {
         // TODO: Parameter validation
         if (this[name] === value) {
@@ -110,11 +121,19 @@ export class Observable implements definition.Observable {
         return this[name];
     }
 
+    private disableNotifications = false;
+
     public _setCore(data: definition.PropertyChangeData) {
+        this.disableNotifications = true;
         this[data.propertyName] = data.value;
+        this.disableNotifications = false;
     }
 
-    public notify(data: definition.EventData) {
+    public notify<T extends definition.EventData>(data: T) {
+        if (this.disableNotifications) {
+            return;
+        }
+
         var observers = this._getEventList(data.eventName);
         if (!observers) {
             return;
@@ -122,8 +141,8 @@ export class Observable implements definition.Observable {
 
         var i;
         var entry: ListenerEntry;
-
-        for (i = 0; i < observers.length; i++) {
+        var observersLength = observers.length;
+        for (i = observersLength - 1; i >= 0; i--) {
             entry = observers[i];
             if (entry.thisArg) {
                 entry.callback.apply(entry.thisArg, [data]);

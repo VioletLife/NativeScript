@@ -1,21 +1,20 @@
 ﻿import observable = require("data/observable");
-import common = require("ui/list-view/list-view-common");
+import common = require("./list-view-common");
 import viewModule = require("ui/core/view");
-import layout = require("ui/layouts/layout");
+import layoutBaseModule = require("ui/layouts/layout-base");
 import stackLayout = require("ui/layouts/stack-layout");
 import proxy = require("ui/core/proxy");
 import dependencyObservable = require("ui/core/dependency-observable");
 import color = require("color");
 import definition = require("ui/list-view");
+import utils = require("utils/utils")
 
 var ITEMLOADING = common.ListView.itemLoadingEvent;
 var LOADMOREITEMS = common.ListView.loadMoreItemsEvent;
 var ITEMTAP = common.ListView.itemTapEvent;
 var REALIZED_INDEX = "realizedIndex";
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 function onSeparatorColorPropertyChanged(data: dependencyObservable.PropertyChangeData) {
     var bar = <ListView>data.object;
@@ -36,7 +35,6 @@ export class ListView extends common.ListView {
     private _android: android.widget.ListView;
     public _realizedItems = {};
     private _androidViewId: number;
-    public _attachStateChangeListener: android.view.View.OnAttachStateChangeListener;
 
     public _createUI() {
         this._android = new android.widget.ListView(this._context);
@@ -53,7 +51,7 @@ export class ListView extends common.ListView {
         var that = new WeakRef(this);
 
         // TODO: This causes many marshalling calls, rewrite in Java and generate bindings
-        this.android.setOnScrollListener(new android.widget.AbsListView.OnScrollListener({
+        this.android.setOnScrollListener(new android.widget.AbsListView.OnScrollListener(<utils.Owned & android.widget.AbsListView.IOnScrollListener>{
             onScrollStateChanged: function (view: android.widget.AbsListView, scrollState: number) {
                 var owner: ListView = this.owner;
                 if (!owner) {
@@ -91,28 +89,6 @@ export class ListView extends common.ListView {
                 }
             }
         }));
-
-        this._attachStateChangeListener = new android.view.View.OnAttachStateChangeListener({
-            get owner() {
-                return that.get();
-            },
-
-            onViewAttachedToWindow: function (view: android.view.View) {
-                //
-            },
-            onViewDetachedFromWindow: function (androidView: android.view.View) {
-                var owner = that.get();
-                if (!owner) {
-                    return;
-                }
-
-                var view: viewModule.View = this.owner._realizedItems[androidView.hashCode()];
-                if (!view) {
-                    return;
-                }
-                view.onUnloaded();
-            }
-        });
     }
 
     get android(): android.widget.ListView {
@@ -125,6 +101,12 @@ export class ListView extends common.ListView {
         }
 
         (<ListViewAdapter>this.android.getAdapter()).notifyDataSetChanged();
+    }
+
+    public scrollToIndex(index: number) {
+        if (this._android) {
+            this._android.setSelection(index);
+        }
     }
 
     public _onDetached(force?: boolean) {
@@ -223,8 +205,9 @@ class ListViewAdapter extends android.widget.BaseAdapter {
         }
 
         if (args.view) {
+            this._listView._prepareItem(args.view, index);
             if (!args.view.parent) {
-                if (args.view instanceof layout.Layout) {
+                if (args.view instanceof layoutBaseModule.LayoutBase) {
                     this._listView._addView(args.view);
                     convertView = args.view.android;
                 } else {
@@ -236,15 +219,9 @@ class ListViewAdapter extends android.widget.BaseAdapter {
                 }
             }
 
-            if (!this._listView._realizedItems[convertView.hashCode()]) {
-                convertView.addOnAttachStateChangeListener(this._listView._attachStateChangeListener);
-            }
-
             this._listView._realizedItems[convertView.hashCode()] = args.view;
             // cache the realized index (used to raise the ItemLoading event upon scroll stop)
             args.view[REALIZED_INDEX] = index;
-
-            this._listView._prepareItem(args.view, index);
         }
 
         return convertView;

@@ -1,16 +1,14 @@
 ﻿import view = require("ui/core/view");
 import trace = require("trace");
 import cssSelector = require("ui/styling/css-selector");
-import cssParser = require("js-libs/reworkcss");
-import {VisualState} from "ui/styling/visual-state";
+import cssParser = require("css");
+import {VisualState} from "./visual-state";
 import application = require("application");
 import utils = require("utils/utils");
 import types = require("utils/types");
 import fs = require("file-system");
-import file_access_module = require("file-system/file-system-access");
 
-var fileAccess = new file_access_module.FileSystemAccess();
-var pattern: RegExp = /url\(('|")(.*?)\1\)/;
+var pattern: RegExp = /('|")(.*?)\1/;
 
 export class StyleScope {
     // caches all the visual states by the key of the visual state selectors
@@ -89,9 +87,13 @@ export class StyleScope {
                             fileName = fs.path.join(fs.knownFolders.currentApp().path, fileName.replace("~/", ""));
                         }
 
-                        fileAccess.readText(fileName, result => {
-                            selectors = StyleScope._joinCssSelectorsArrays([selectors, StyleScope.createSelectorsFromCss(result, fileName)]);
-                        });
+                        if (fs.File.exists(fileName)) {
+                            var file = fs.File.fromPath(fileName);
+                            var text = file.readTextSync();
+                            if (text) {
+                                selectors = StyleScope._joinCssSelectorsArrays([selectors, StyleScope.createSelectorsFromCss(text, fileName)]);
+                            }
+                        }
                     }
                 }
             }
@@ -198,7 +200,6 @@ export class StyleScope {
 
         var rules = ast.stylesheet.rules;
         var rule: cssParser.Rule;
-        var filteredDeclarations: cssParser.Declaration[];
         var i;
         var j;
 
@@ -207,11 +208,25 @@ export class StyleScope {
             rule = rules[i];
             // Skip comment nodes.
             if (rule.type === "rule") {
+
                 // Filter comment nodes.
-                filteredDeclarations = rule.declarations.filter((val, i, arr) => { return val.type === "declaration" });
-                for (j = 0; j < rule.selectors.length; j++) {
-                    result.push(cssSelector.createSelector(rule.selectors[j], filteredDeclarations));
+                var filteredDeclarations = [];
+                if (rule.declarations) {
+                    for (j = 0; j < rule.declarations.length; j++) {
+                        var declaration = rule.declarations[j];
+                        if (declaration.type === "declaration") {
+                            filteredDeclarations.push({
+                                property: declaration.property.toLowerCase(),
+                                value: declaration.value
+                            });
+                        }
+                    }
                 }
+
+                    for (j = 0; j < rule.selectors.length; j++) {
+                        result.push(cssSelector.createSelector(rule.selectors[j], filteredDeclarations));
+                    }
+                //}
             }
         }
 

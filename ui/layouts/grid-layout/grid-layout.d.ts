@@ -1,5 +1,5 @@
 ﻿declare module "ui/layouts/grid-layout" {
-    import layout = require("ui/layouts/layout");
+    import layout = require("ui/layouts/layout-base");
     import view = require("ui/core/view");
 
     /**
@@ -68,7 +68,7 @@
     /**
      * Defines a rectangular layout area that consists of columns and rows.
      */
-    export class GridLayout extends layout.Layout {
+    export class GridLayout extends layout.LayoutBase {
 
         ///**
         // * Initializes a new instance of GridLayout.
@@ -119,12 +119,12 @@
         /**
          * Adds a column specification to a GridLayout.
          */
-        public addColumn(itemSpec: ItemSpec);
+        public addColumn(itemSpec: ItemSpec): void;
 
         /**
          * Adds a row specification to a GridLayout.
          */
-        public addRow(itemSpec: ItemSpec);
+        public addRow(itemSpec: ItemSpec): void;
 
         /**
          * Removes a column specification from a GridLayout.
@@ -132,9 +132,19 @@
         public removeColumn(itemSpec: ItemSpec): void;
 
         /**
+         * Removes all columns specification from a GridLayout.
+         */
+        public removeColumns(): void;
+
+        /**
          * Removes a row specification from a GridLayout.
          */
         public removeRow(itemSpec: ItemSpec): void;
+
+        /**
+         * Removes all rows specification from a GridLayout.
+         */
+        public removeRows(): void;
 
         /**
          * Gets array of column specifications defined on this instance of GridLayout. 

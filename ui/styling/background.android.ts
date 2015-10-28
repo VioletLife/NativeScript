@@ -1,9 +1,8 @@
 import utils = require("utils/utils");
-import common = require("ui/styling/background-common");
+import common = require("./background-common");
 import dts = require("ui/styling/background");
 
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 // We are using "ad" here to avoid namespace collision with the global android object
 export module ad {

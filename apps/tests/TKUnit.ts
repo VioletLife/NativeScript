@@ -29,12 +29,23 @@ export interface TestInfoEntry {
     testTimeout: number;
 }
 
+export function time(): number {
+    if (global.android) {
+        return java.lang.System.nanoTime() / 1000000; // 1 ms = 1000000 ns
+    }
+    else {
+        return CACurrentMediaTime() * 1000;
+    }
+}
+
 export var write = function write(message: string, type?: number) {
     //console.log(message);
     trace.write(message, trace.categories.Test, type);
 }
 
 var runTest = function (testInfo: TestInfoEntry) {
+    let start = time();
+    let duration;
     try {
         if (testInfo.instance) {
             testInfo.testFunc.apply(testInfo.instance);
@@ -44,13 +55,15 @@ var runTest = function (testInfo: TestInfoEntry) {
         }
 
         if (testInfo.isTest) {
-            write("--- [" + testInfo.testName + "] OK", trace.messageType.info);
+            duration = time() - start;
+            write("--- [" + testInfo.testName + "] OK, duration: " + duration, trace.messageType.info);
             testInfo.isPassed = true;
         }
     }
     catch (e) {
         if (testInfo.isTest) {
-            write("--- [" + testInfo.testName + "]  FAILED: " + e.message, trace.messageType.error);
+            duration = time() - start;
+            write("--- [" + testInfo.testName + "]  FAILED: " + e.message + ", duration: " + duration, trace.messageType.error);
             testInfo.isPassed = false;
             testInfo.errorMessage = e.message;
         }
@@ -78,7 +91,7 @@ function runAsync(testInfo: TestInfoEntry, recursiveIndex: number, testTimeout?:
     var error;
     var isDone = false;
     var handle;
-    var testStartTime = new Date().getTime();
+    var testStartTime = time();
     //write("--- [" + testInfo.testName + "] Started at: " + testStartTime, trace.messageType.info);
     var doneCallback = function (e: Error) {
         if (e) {
@@ -93,29 +106,31 @@ function runAsync(testInfo: TestInfoEntry, recursiveIndex: number, testTimeout?:
         testTimeout = defaultTimeout;
     }
 
+    let duration;
     var checkFinished = function () {
+        duration = time() - testStartTime;
         if (isDone) {
-            write("--- [" + testInfo.testName + "] OK", trace.messageType.info);
+            write("--- [" + testInfo.testName + "] OK, duration: " + duration, trace.messageType.info);
             //write("--- [" + testInfo.testName + "] took: " + (new Date().getTime() - testStartTime), trace.messageType.info);
             testInfo.isPassed = true;
             runTests(testsQueue, recursiveIndex + 1);
         }
         else if (error) {
-            write("--- [" + testInfo.testName + "]  FAILED: " + error.message, trace.messageType.error);
+            write("--- [" + testInfo.testName + "]  FAILED: " + error.message + ", duration: " + duration, trace.messageType.error);
             //write("--- [" + testInfo.testName + "] took: " + (new Date().getTime() - testStartTime), trace.messageType.info);
             testInfo.errorMessage = error.message;
             runTests(testsQueue, recursiveIndex + 1);
         }
         else {
-            var testEndTime = new Date().getTime();
+            var testEndTime = time();
             if (testEndTime - testStartTime > testTimeout) {
-                write("--- [" + testInfo.testName + "]  TIMEOUT", trace.messageType.error);
+                write("--- [" + testInfo.testName + "]  TIMEOUT, duration: " + duration, trace.messageType.error);
                 //write("--- [" + testInfo.testName + "] took: " + (testEndTime - testStartTime), trace.messageType.info);
                 testInfo.errorMessage = "Test timeout.";
                 runTests(testsQueue, recursiveIndex + 1);
             }
             else {
-                setTimeout(checkFinished, 200);
+                setTimeout(checkFinished, 10);
             }
         }
     }
@@ -156,6 +171,12 @@ export function assert(test: any, message?: string) {
     }
 };
 
+export function assertTrue(test: boolean, message?: string) {
+    if (test !== true) {
+        throw new Error(message);
+    }
+};
+
 export function assertNotEqual(actual: any, expected: any, message?: string) {
 
     var equals = false;
@@ -188,11 +209,11 @@ export function assertEqual(actual: any, expected: any, message?: string) {
 
         // Use the equals method
         if (!actual.equals(expected)) {
-            throw new Error(message + " Actual: " + actual + " Expected: " + expected);
+            throw new Error(`${message} Actual: <${actual}>(${typeof(actual)}). Expected: <${expected}>(${typeof(expected)})`);
         }
     }
     else if (actual !== expected) {
-        throw new Error(message + " Actual: " + actual + " Expected: " + expected);
+        throw new Error(`${message} Actual: <${actual}>(${typeof(actual)}). Expected: <${expected}>(${typeof(expected)})`);
     }
 };
 
@@ -202,8 +223,15 @@ export function assertNull(actual: any, message?: string) {
     }
 };
 
-export function assertAreClose(actual: number, expected: number, delta: number, message?: string) {
+export function areClose(actual: number, expected: number, delta: number): boolean {
     if (isNaN(actual) || Math.abs(actual - expected) > delta) {
+        return false;
+    }
+
+    return true;
+}
+export function assertAreClose(actual: number, expected: number, delta: number, message?: string) {
+    if (!areClose(actual, expected, delta)) {
         throw new Error(message + " Numbers are not close enough. Actual: " + actual + " Expected: " + expected + " Delta: " + delta);
     }
 };

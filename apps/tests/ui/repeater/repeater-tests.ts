@@ -3,6 +3,11 @@ import app = require("application");
 import helper = require("../helper");
 import viewModule = require("ui/core/view");
 import stackLayoutModule = require("ui/layouts/stack-layout");
+import wrapLayoutModule = require("ui/layouts/wrap-layout");
+import layoutBaseModule = require("ui/layouts/layout-base");
+import fs = require("file-system");
+import pageModule = require("ui/page");
+import gestureModule = require("ui/gestures");
 
 // <snippet module="ui/repeater" title="repeater">
 // # Repeater
@@ -28,7 +33,7 @@ import labelModule = require("ui/label");
 // <Page>
 //  {%raw%}<Repeater items="{{ myItems }}">
 //     <Repeater.itemTemplate>
-//        <Label text="{{ title || 'Downloading...' }}" textWrap="true" cssClass="title" />
+//        <Label text="{{ title || 'Downloading...' }}" textWrap="true" class="title" />
 //     </Repeater.itemTemplate>
 //  </Repeater>{%endraw%}
 // </Page>
@@ -176,7 +181,7 @@ export function test_set_itmes_to_null_clears_items() {
     helper.buildUIAndRunTest(repeater, testAction);
 }
 
-export function test_set_itmeLayout_accepted() {
+export function test_set_itemsLayout_accepted() {
     // <snippet module="ui/repeater" title="repeater">
     // ### Using Repeater with different layout.
     // ``` JavaScript
@@ -378,8 +383,80 @@ export function test_BindingRepeaterToASimpleArrayWithExpression() {
 
     helper.buildUIAndRunTest(repeater, testAction);
 }
+
+export var test_RepeaterItemsGestureBindings = function () {
+    var testFunc = function (page: pageModule.Page) {
+        var repeater = <repeaterModule.Repeater>(page.getViewById("repeater"));
+        var hasObservers = false;
+        var eachChildCallback = function (childItem: viewModule.View) {
+            if (childItem instanceof labelModule.Label) {
+                var gestureObservers = childItem.getGestureObservers(gestureModule.GestureTypes.tap);
+                hasObservers = gestureObservers ? gestureObservers.length > 0 : false;
+            }
+            else if (childItem instanceof layoutBaseModule.LayoutBase) {
+                childItem._eachChildView(eachChildCallback);
+            }
+            return true;
+        }
+
+        repeater._eachChildView(eachChildCallback);
+
+        TKUnit.assertEqual(hasObservers, true, "Every item should have tap observer!");
+    }
+
+    var moduleName = __dirname.substr(fs.knownFolders.currentApp().path.length);
+    helper.navigateToModuleAndRunTest(("." + moduleName + "/repeaterItems-bindingToGestures"), null, testFunc);
+}
+
+export var test_RepeaterItemsParentBindingsShouldWork = function () {
+    var testFunc = function (page: pageModule.Page) {
+        var repeater = <repeaterModule.Repeater>(page.getViewById("repeater"));
+        var expectedText = page.bindingContext["parentViewProperty"];
+        var testPass = false;
+        var eachChildCallback = function (childItem: viewModule.View) {
+            if (childItem instanceof labelModule.Label) {
+                testPass = (<labelModule.Label>childItem).text === expectedText;
+                if (testPass === false) {
+                    return false;
+                }
+            }
+            else if (childItem instanceof layoutBaseModule.LayoutBase) {
+                childItem._eachChildView(eachChildCallback);
+            }
+            return true;
+        }
+
+        repeater._eachChildView(eachChildCallback);
+
+        TKUnit.assertEqual(testPass, true, "Every item should have text bound to Page binding context!");
+    }
+
+    var moduleName = __dirname.substr(fs.knownFolders.currentApp().path.length);
+    helper.navigateToModuleAndRunTest(("." + moduleName + "/repeaterItems-bindingToGestures"), null, testFunc);
+}
+
+export function test_ChildrenAreNotCreatedUntilTheRepeaterIsLoaded() {
+    var repeater = new repeaterModule.Repeater();
+
+    repeater.itemsLayout = new wrapLayoutModule.WrapLayout();
+    TKUnit.assertEqual(getChildrenCount(repeater), 0, "Repeater should not create its children until loaded.");
+
+    repeater.itemTemplate = "<Label id=\"testLabel\" text=\"{{ $value, $value + ' some static text' }}\" />";
+    TKUnit.assertEqual(getChildrenCount(repeater), 0, "Repeater should not create its children until loaded.");
+
+    repeater.items = [1, 2, 3];
+    TKUnit.assertEqual(getChildrenCount(repeater), 0, "Repeater should not create its children until loaded.");
+
+    function testAction(views: Array<viewModule.View>) {
+        TKUnit.waitUntilReady(() => repeater.isLoaded);
+        TKUnit.assertEqual(getChildrenCount(repeater), 3, "Repeater should have created its children when loaded.");
+    }
+
+    helper.buildUIAndRunTest(repeater, testAction);
+}
+
 /*
-export function test_no_memory_leak_when_items_is_regular_array() {
+export function test_no_memory_leak_when_items_is_regular_array(done) {
     var createFunc = function (): repeaterModule.Repeater {
         var repeater = new repeaterModule.Repeater();
         repeater.items = FEW_ITEMS;
@@ -388,10 +465,10 @@ export function test_no_memory_leak_when_items_is_regular_array() {
 
     helper.buildUIWithWeakRefAndInteract(createFunc,(list) => {
         TKUnit.assert(list.isLoaded, "Repeater should be loaded here");
-    });
+    }, done);
 }
 
-export function test_no_memory_leak_when_items_is_observable_array() {
+export function test_no_memory_leak_when_items_is_observable_array(done) {
     // Keep the reference to the observable array to test the weakEventListener 
     var colors = new observableArray.ObservableArray(["red", "green", "blue"]);
 
@@ -403,7 +480,7 @@ export function test_no_memory_leak_when_items_is_observable_array() {
 
     helper.buildUIWithWeakRefAndInteract(createFunc,(list) => {
         TKUnit.assert(list.isLoaded, "Repeater should be loaded here");
-    });
+    }, done);
 }
 */
 function getChildrenCount(repeater: repeaterModule.Repeater): number {

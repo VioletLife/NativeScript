@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <Page>
+  <Page.actionBar>
+    <ActionBar title="Title" class="custom-action-bar">
+      <ActionBar.actionItems>
+        <ActionItem text="set" tap="setStyle"/>
+        <ActionItem text="clear" tap="clearStyle"/>
+      </ActionBar.actionItems>
+    </ActionBar>
+  </Page.actionBar>
   <ScrollView>
     <StackLayout>
       <Button tap="itemTap" text="action bar hidden" tag="action-bar-hidden" />

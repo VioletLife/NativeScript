@@ -1,36 +1,32 @@
-﻿import common = require("ui/gestures/gestures-common");
+﻿import common = require("./gestures-common");
 import definition = require("ui/gestures");
 import view = require("ui/core/view");
 import observable = require("data/observable");
 import trace = require("trace");
 
-// merge the exports of the request file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 class UIGestureRecognizerImpl extends NSObject {
-    static new(): UIGestureRecognizerImpl {
-        return <UIGestureRecognizerImpl>super.new();
-    }
 
-    private _owner: GesturesObserver;
+    private _owner: WeakRef<GesturesObserver>;
     private _type: any;
     private _callback: Function;
     private _context: any;
 
-    public initWithOwnerTypeCallback(owner: GesturesObserver, type: any, callback?: Function, thisArg?: any): UIGestureRecognizerImpl {
-        this._owner = owner;
-        this._type = type;
+    public static initWithOwnerTypeCallback(owner: WeakRef<GesturesObserver>, type: any, callback?: Function, thisArg?: any): UIGestureRecognizerImpl {
+        let handler = <UIGestureRecognizerImpl>UIGestureRecognizerImpl.new();
+        handler._owner = owner;
+        handler._type = type;
 
         if (callback) {
-            this._callback = callback;
+            handler._callback = callback;
         }
 
         if (thisArg) {
-            this._context = thisArg;
+            handler._context = thisArg;
         }
 
-        return this;
+        return handler;
     }
 
     public static ObjCExposedMethods = {
@@ -38,15 +34,18 @@ class UIGestureRecognizerImpl extends NSObject {
     };
 
     public recognize(recognizer: UIGestureRecognizer): void {
-        var callback = this._callback ? this._callback : this._owner.callback;
-        var type = this._type;
-        var target = this._owner.target;
+        let owner = this._owner.get();
+        let callback = this._callback ? this._callback : (owner ? owner.callback : null);
+        let typeParam = this._type;
+        let target = owner ? owner.target : undefined;
 
         var args = {
-            type: type,
+            type: typeParam,
             view: target,
             ios: recognizer,
-            android: undefined
+            android: undefined,
+            object: target,
+            eventName: definition.toString(typeParam),
         };
 
         if (callback) {
@@ -75,7 +74,7 @@ export class GesturesObserver extends common.GesturesObserver {
             };
             this._onTargetUnloaded = args => {
                 trace.write(this.target + ".target unloaded. _nativeView:" + this.target._nativeView, "gestures");
-                this._dettach();
+                this._detach();
             };
 
             this.target.on(view.View.loadedEvent, this._onTargetLoaded);
@@ -89,7 +88,7 @@ export class GesturesObserver extends common.GesturesObserver {
 
     private _attach(target: view.View, type: definition.GestureTypes) {
         trace.write(target + "._attach() _nativeView:" + target._nativeView, "gestures");
-        this._dettach();
+        this._detach();
 
         if (target && target._nativeView && target._nativeView.addGestureRecognizer) {
             var nativeView = <UIView>target._nativeView;
@@ -147,8 +146,8 @@ export class GesturesObserver extends common.GesturesObserver {
         }
     }
 
-    private _dettach() {
-        trace.write(this.target + "._dettach() _nativeView:" + this.target._nativeView, "gestures");
+    private _detach() {
+        trace.write(this.target + "._detach() _nativeView:" + this.target._nativeView, "gestures");
         if (this.target && this.target._nativeView) {
             for (var name in this._recognizers) {
                 if (this._recognizers.hasOwnProperty(name)) {
@@ -164,7 +163,7 @@ export class GesturesObserver extends common.GesturesObserver {
     }
 
     public disconnect() {
-        this._dettach();
+        this._detach();
 
         if (this.target) {
             this.target.off(view.View.loadedEvent, this._onTargetLoaded);
@@ -209,7 +208,7 @@ export class GesturesObserver extends common.GesturesObserver {
 }
 
 function _createUIGestureRecognizerTarget(owner: GesturesObserver, type: definition.GestureTypes, callback?: (args: definition.GestureEventData) => void, thisArg?: any): any {
-    return UIGestureRecognizerImpl.new().initWithOwnerTypeCallback(owner, type, callback, thisArg);
+    return UIGestureRecognizerImpl.initWithOwnerTypeCallback(new WeakRef(owner), type, callback, thisArg);
 }
 
 interface RecognizerCache {
@@ -259,6 +258,8 @@ function _getPinchData(args: definition.GestureEventData): definition.PinchGestu
         ios: args.ios,
         android: undefined,
         scale: recognizer.scale,
+        object: args.view,
+        eventName: definition.toString(args.type)
     };
 }
 
@@ -270,6 +271,8 @@ function _getSwipeData(args: definition.GestureEventData): definition.SwipeGestu
         ios: args.ios,
         android: undefined,
         direction: _getSwipeDirection(recognizer.direction),
+        object: args.view,
+        eventName: definition.toString(args.type)
     };
 }
 
@@ -281,7 +284,9 @@ function _getPanData(args: definition.GestureEventData, view: UIView): definitio
         ios: args.ios,
         android: undefined,
         deltaX: recognizer.translationInView(view).x,
-        deltaY: recognizer.translationInView(view).y
+        deltaY: recognizer.translationInView(view).y,
+        object: args.view,
+        eventName: definition.toString(args.type)
     };
 }
 
@@ -293,5 +298,7 @@ function _getRotationData(args: definition.GestureEventData): definition.Rotatio
         ios: args.ios,
         android: undefined,
         rotation: recognizer.rotation * (180.0 / Math.PI),
+        object: args.view,
+        eventName: definition.toString(args.type)
     };
 }

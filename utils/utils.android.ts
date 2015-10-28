@@ -1,9 +1,7 @@
-﻿import application = require("application");
-import common = require("utils/utils-common");
+﻿import common = require("./utils-common");
+import trace = require("trace");
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 export module layout {
     var density = -1;
@@ -17,9 +15,9 @@ export module layout {
     var useOldMeasureSpec = false;
 
     export function makeMeasureSpec(size: number, mode: number): number {
-        if (sdkVersion === -1 && application.android && application.android.context) {
+        if (sdkVersion === -1) {
             // check whether the old layout is needed
-            sdkVersion = application.android.context.getApplicationInfo().targetSdkVersion;
+            sdkVersion = ad.getApplicationContext().getApplicationInfo().targetSdkVersion;
             useOldMeasureSpec = sdkVersion <= android.os.Build.VERSION_CODES.JELLY_BEAN_MR1;
         }
 
@@ -40,7 +38,7 @@ export module layout {
 
     function getDisplayMetrics(): android.util.DisplayMetrics {
         if (!metrics) {
-            metrics = application.android.context.getResources().getDisplayMetrics();
+            metrics = ad.getApplicationContext().getResources().getDisplayMetrics();
         }
 
         return metrics;
@@ -49,6 +47,32 @@ export module layout {
 
 // We are using "ad" here to avoid namespace collision with the global android object
 export module ad {
+
+    export function getApplication() { return <android.app.Application>(<any>com.tns).NativeScriptApplication.getInstance(); }
+    export function getApplicationContext() { return <android.content.Context>getApplication().getApplicationContext(); }
+
+    var inputMethodManager: android.view.inputmethod.InputMethodManager;
+    export function getInputMethodManager() { 
+        if (!inputMethodManager) {
+            inputMethodManager = <android.view.inputmethod.InputMethodManager>getApplicationContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+        }
+        return inputMethodManager;
+    }
+
+    export function showSoftInput(nativeView: android.view.View) : void {
+        var imm = getInputMethodManager();
+        if (imm && nativeView instanceof android.view.View) {
+            imm.showSoftInput(nativeView, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        }
+    }
+
+    export function dismissSoftInput(nativeView: android.view.View): void {
+        var imm = getInputMethodManager();
+        if (imm && nativeView instanceof android.view.View) {
+            imm.hideSoftInputFromWindow(nativeView.getWindowToken(), 0);
+        }
+    }
+
     export module collections {
         export function stringArrayToStringSet(str: string[]): any {
             var hashSet = new java.util.HashSet();
@@ -75,6 +99,9 @@ export module ad {
     }
 
     export module resources {
+        var attr;
+        var attrCache = new Map<string, number>();
+
         export function getDrawableId(name) {
             return getId(":drawable/" + name);
         }
@@ -84,15 +111,60 @@ export module ad {
         }
 
         export function getId(name: string): number {
-            var context = application.android.context;
-            var resources = context.getResources();
-            var packageName = context.getPackageName();
+            var resources = getApplicationContext().getResources();
+            var packageName = getApplicationContext().getPackageName();
             var uri = packageName + name;
             return resources.getIdentifier(uri, null, null);
+        }
+
+        export function getPalleteColor(name: string, context: android.content.Context): number {
+            if (attrCache.has(name)) {
+                return attrCache.get(name);
+            }
+
+            var result = 0;
+            try {
+                if (!attr) {
+                    attr = java.lang.Class.forName("android.support.v7.appcompat.R$attr")
+                }
+
+                let colorID = 0;
+                let field = attr.getField(name);
+                if (field) {
+                    colorID = field.getInt(null);
+                }
+
+                if (colorID) {
+                    let typedValue = new android.util.TypedValue();
+                    context.getTheme().resolveAttribute(colorID, typedValue, true);
+                    result = typedValue.data;
+                }
+            }
+            catch (ex) {
+                trace.write("Cannot get pallete color: " + name, trace.categories.Error, trace.messageType.error);
+            }
+
+            attrCache.set(name, result);
+            return result;
         }
     }
 }
 
 export function GC() {
     gc();
+}
+
+export function openUrl(location: string): boolean {
+    var context = ad.getApplicationContext();
+    try {
+        var intent = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(location.trim()));
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+
+        context.startActivity(intent);
+    } catch (e) {
+        // We Don't do anything with an error.  We just output it
+        console.error("Error in OpenURL", e);
+        return false;
+    }
+    return true;
 }

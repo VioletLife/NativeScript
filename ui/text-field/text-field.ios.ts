@@ -1,4 +1,4 @@
-﻿import common = require("ui/text-field/text-field-common");
+﻿import common = require("./text-field-common");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
 import textBase = require("ui/text-base");
@@ -11,76 +11,122 @@ function onSecurePropertyChanged(data: dependencyObservable.PropertyChangeData) 
 
 (<proxy.PropertyMetadata>common.secureProperty.metadata).onSetNativeValue = onSecurePropertyChanged;
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 class UITextFieldDelegateImpl extends NSObject implements UITextFieldDelegate {
     public static ObjCProtocols = [UITextFieldDelegate];
 
-    static new(): UITextFieldDelegateImpl {
-        return <UITextFieldDelegateImpl>super.new();
+    private _owner: WeakRef<TextField>;
+    private firstEdit: boolean;
+
+    public static initWithOwner(owner: WeakRef<TextField>): UITextFieldDelegateImpl {
+        let delegate = <UITextFieldDelegateImpl>UITextFieldDelegateImpl.new();
+        delegate._owner = owner;
+        return delegate;
     }
 
-    private _owner: TextField;
-    private firstEdit: boolean;
-    
-    public initWithOwner(owner: TextField): UITextFieldDelegateImpl {
-        this._owner = owner;
-        return this;
-    }
-    
     public textFieldShouldBeginEditing(textField: UITextField): boolean {
         this.firstEdit = true;
-        return this._owner.editable;
+        let owner = this._owner.get();
+        if (owner) {
+            return owner.editable;
+        }
+
+        return true;
     }
 
     public textFieldDidEndEditing(textField: UITextField) {
-        if (this._owner.updateTextTrigger === enums.UpdateTextTrigger.focusLost) {
-            this._owner._onPropertyChangedFromNative(textBase.TextBase.textProperty, textField.text);
-        }
+        let owner = this._owner.get();
+        if (owner) {
+            if (owner.updateTextTrigger === enums.UpdateTextTrigger.focusLost) {
+                owner._onPropertyChangedFromNative(textBase.TextBase.textProperty, textField.text);
+            }
 
-        this._owner.dismissSoftInput();
+            owner.dismissSoftInput();
+        }
     }
 
     public textFieldShouldClear(textField: UITextField) {
         this.firstEdit = false;
-        this._owner._onPropertyChangedFromNative(textBase.TextBase.textProperty, "");
+        let owner = this._owner.get();
+        if (owner) {
+            owner._onPropertyChangedFromNative(textBase.TextBase.textProperty, "");
+        }
+
         return true;
     }
 
     public textFieldShouldReturn(textField: UITextField): boolean {
         // Called when the user presses the return button.
-        this._owner.dismissSoftInput();
+        let owner = this._owner.get();
+        if (owner) {
+            owner.dismissSoftInput();
+            owner.notify({ eventName: TextField.returnPressEvent, object: owner });
+        }
         return true;
     }
 
     public textFieldShouldChangeCharactersInRangeReplacementString(textField: UITextField, range: NSRange, replacementString: string): boolean {
-        if (this._owner.updateTextTrigger === enums.UpdateTextTrigger.textChanged) {
-            if (textField.secureTextEntry && this.firstEdit) {
-                this._owner._onPropertyChangedFromNative(textBase.TextBase.textProperty, replacementString);
-            }
-            else {
-                var newText = NSString.alloc().initWithString(textField.text).stringByReplacingCharactersInRangeWithString(range, replacementString);
-                this._owner._onPropertyChangedFromNative(textBase.TextBase.textProperty, newText);
+        let owner = this._owner.get();
+        if (owner) {
+            if (owner.updateTextTrigger === enums.UpdateTextTrigger.textChanged) {
+                if (textField.secureTextEntry && this.firstEdit) {
+                    owner._onPropertyChangedFromNative(textBase.TextBase.textProperty, replacementString);
+                }
+                else {
+                    let newText = NSString.alloc().initWithString(textField.text).stringByReplacingCharactersInRangeWithString(range, replacementString);
+                    owner._onPropertyChangedFromNative(textBase.TextBase.textProperty, newText);
+                }
             }
         }
-        this.firstEdit = false;
 
+        this.firstEdit = false;
         return true;
+    }
+}
+
+class UITextFieldImpl extends UITextField {
+
+    private _owner: WeakRef<TextField>;
+
+    public static initWithOwner(owner: WeakRef<TextField>): UITextFieldImpl {
+        let handler = <UITextFieldImpl>UITextFieldImpl.new();
+        handler._owner = owner;
+        return handler;
+    }
+
+    private _getTextRectForBounds(bounds: CGRect): CGRect {
+        let owner = this._owner ? this._owner.get() : null;
+
+        if (!owner) {
+            return bounds;
+        }
+
+        let size = bounds.size;
+        return CGRectMake(owner.borderWidth + owner.style.paddingLeft, owner.borderWidth + owner.style.paddingTop,
+            size.width - (owner.borderWidth + owner.style.paddingLeft + owner.style.paddingRight + owner.borderWidth),
+            size.height - (owner.borderWidth + owner.style.paddingTop + owner.style.paddingBottom + owner.borderWidth)
+        );
+    }
+
+    public textRectForBounds(bounds: CGRect): CGRect {
+        return this._getTextRectForBounds(bounds);
+    }
+
+    public editingRectForBounds(bounds: CGRect): CGRect {
+        return this._getTextRectForBounds(bounds);
     }
 }
 
 export class TextField extends common.TextField {
     private _ios: UITextField;
-    private _delegate: any;
+    private _delegate: UITextFieldDelegateImpl;
 
     constructor() {
         super();
 
-        this._ios = new UITextField();
-
-        this._delegate = UITextFieldDelegateImpl.new().initWithOwner(this);
+        this._ios = UITextFieldImpl.initWithOwner(new WeakRef(this));
+        this._delegate = UITextFieldDelegateImpl.initWithOwner(new WeakRef(this));
     }
 
     public onLoaded() {
@@ -99,6 +145,6 @@ export class TextField extends common.TextField {
 
     public _onHintPropertyChanged(data: dependencyObservable.PropertyChangeData) {
         var textField = <TextField>data.object;
-        textField.ios.placeholder = data.newValue;
+        textField.ios.placeholder = data.newValue + "";
     }
 } 

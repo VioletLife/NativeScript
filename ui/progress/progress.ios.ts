@@ -1,4 +1,4 @@
-﻿import common = require("ui/progress/progress-common");
+﻿import common = require("./progress-common");
 import dependencyObservable = require("ui/core/dependency-observable");
 import proxy = require("ui/core/proxy");
 
@@ -16,9 +16,7 @@ function onMaxValuePropertyChanged(data: dependencyObservable.PropertyChangeData
 (<proxy.PropertyMetadata>common.Progress.valueProperty.metadata).onSetNativeValue = onValuePropertyChanged;
 (<proxy.PropertyMetadata>common.Progress.maxValueProperty.metadata).onSetNativeValue = onMaxValuePropertyChanged;
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 export class Progress extends common.Progress {
     private _ios: UIProgressView;

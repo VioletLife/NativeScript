@@ -1,4 +1,4 @@
-﻿import common = require("ui/action-bar/action-bar-common");
+﻿import common = require("./action-bar-common");
 import dts = require("ui/action-bar");
 import imageSource = require("image-source");
 import frameModule = require("ui/frame");
@@ -6,8 +6,7 @@ import enums = require("ui/enums");
 import view = require("ui/core/view");
 import utils = require("utils/utils");
 
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 export class ActionItem extends common.ActionItemBase implements dts.ActionItem {
     private _ios: dts.IOSActionItemSettings = { position: enums.IOSActionItemPosition.left };
@@ -39,21 +38,20 @@ export class ActionBar extends common.ActionBar {
         navigationItem.title = this.title;
 
         if (this.titleView && this.titleView.ios) {
-            console.log("setting center view: " + this.titleView.ios);
             navigationItem.titleView = this.titleView.ios;
         }
 
         // Find previous ViewController in the navigation stack
         var indexOfViewController = navController.viewControllers.indexOfObject(viewController);
-        if (indexOfViewController !== NSNotFound && indexOfViewController > 0) {
+        if (indexOfViewController < navController.viewControllers.count && indexOfViewController > 0) {
             previousController = navController.viewControllers[indexOfViewController - 1];
         }
    
         // Set back button text
         if (previousController) {
             if (this.navigationButton) {
-                var tapHandler = TapBarItemHandlerImpl.new().initWithOwner(this.navigationButton);
-                var barButtonItem = UIBarButtonItem.alloc().initWithTitleStyleTargetAction(this.navigationButton.text, UIBarButtonItemStyle.UIBarButtonItemStylePlain, tapHandler, "tap");
+                var tapHandler = TapBarItemHandlerImpl.initWithOwner(new WeakRef(this.navigationButton));
+                var barButtonItem = UIBarButtonItem.alloc().initWithTitleStyleTargetAction(this.navigationButton.text + "", UIBarButtonItemStyle.UIBarButtonItemStylePlain, tapHandler, "tap");
                 previousController.navigationItem.backBarButtonItem = barButtonItem;
             }
             else {
@@ -67,6 +65,9 @@ export class ActionBar extends common.ActionBar {
             img = imageSource.fromFileOrResource(this.navigationButton.icon);
         }
 
+        // TODO: This could cause issue when canceling BackEdge gesture - we will change the backIndicator to 
+        // show the one from the old page but the new page will still be visible (because we canceled EdgeBackSwipe gesutre)
+        // Consider moving this to new method and call it from - navigationControllerDidShowViewControllerAnimated.
         if (img && img.ios) {
             var image = img.ios.imageWithRenderingMode(UIImageRenderingMode.UIImageRenderingModeAlwaysOriginal)
             navigationBar.backIndicatorImage = image;
@@ -110,7 +111,7 @@ export class ActionBar extends common.ActionBar {
     }
 
     private createBarButtonItem(item: dts.ActionItem): UIBarButtonItem {
-        var tapHandler = TapBarItemHandlerImpl.new().initWithOwner(item);
+        var tapHandler = TapBarItemHandlerImpl.initWithOwner(new WeakRef(item));
         // associate handler with menuItem or it will get collected by JSC.
         (<any>item).handler = tapHandler;
 
@@ -122,7 +123,7 @@ export class ActionBar extends common.ActionBar {
             }
         }
         else {
-            barButtonItem = UIBarButtonItem.alloc().initWithTitleStyleTargetAction(item.text, UIBarButtonItemStyle.UIBarButtonItemStylePlain, tapHandler, "tap");
+            barButtonItem = UIBarButtonItem.alloc().initWithTitleStyleTargetAction(item.text + "", UIBarButtonItemStyle.UIBarButtonItemStylePlain, tapHandler, "tap");
         }
 
         return barButtonItem;
@@ -137,48 +138,66 @@ export class ActionBar extends common.ActionBar {
         navigationItem.title = this.title;
     }
 
+    private _navigationBarHeight: number = 0;
     public onMeasure(widthMeasureSpec: number, heightMeasureSpec: number) {
-        if (this.titleView) {
-            var width = utils.layout.getMeasureSpecSize(widthMeasureSpec);
 
-            view.View.measureChild(this, this.titleView,
-                utils.layout.makeMeasureSpec(width, utils.layout.AT_MOST),
-                utils.layout.makeMeasureSpec(this.navigationBarHeight, utils.layout.AT_MOST));
+        let width = utils.layout.getMeasureSpecSize(widthMeasureSpec);
+        let widthMode = utils.layout.getMeasureSpecMode(widthMeasureSpec);
+
+        let height = utils.layout.getMeasureSpecSize(heightMeasureSpec);
+        let heightMode = utils.layout.getMeasureSpecMode(heightMeasureSpec);
+
+        let navBarWidth = 0;
+        let navBarHeight = 0;
+
+        let frame = <frameModule.Frame>this.page.frame;
+        if (frame) {
+            let navBar: UIView = frame.ios.controller.navigationBar;
+            if (!navBar.hidden) {
+                let navBarSize = navBar.sizeThatFits(CGSizeMake(
+                    (widthMode === utils.layout.UNSPECIFIED) ? Number.POSITIVE_INFINITY : width,
+                    (heightMode === utils.layout.UNSPECIFIED) ? Number.POSITIVE_INFINITY : height));
+                navBarWidth = navBarSize.width;
+                navBarHeight = navBarSize.height;
+            }
         }
 
-        this.setMeasuredDimension(0, 0);
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        this._navigationBarHeight = navBarHeight;
+        if (this.titleView) {
+            view.View.measureChild(this, this.titleView,
+                utils.layout.makeMeasureSpec(width, utils.layout.AT_MOST),
+                utils.layout.makeMeasureSpec(navBarHeight, utils.layout.AT_MOST));
+        }
+
+        // We ignore our width/height, minWidth/minHeight dimensions because it is against Apple policy to change height of NavigationBar.
+        this.setMeasuredDimension(navBarWidth, navBarHeight);
     }
 
     public onLayout(left: number, top: number, right: number, bottom: number) {
-        view.View.layoutChild(this, this.titleView, 0, 0, right - left, this.navigationBarHeight);
+        view.View.layoutChild(this, this.titleView, 0, 0, right - left, this._navigationBarHeight);
         super.onLayout(left, top, right, bottom);
     }
 
-    protected get navigationBarHeight(): number {
-        var navController = frameModule.topmost().ios.controller;
-        if (!navController) {
-            return 0;
-        }
-        var navigationBar = navController.navigationBar;
-        return (navigationBar && !navController.navigationBarHidden) ? navigationBar.frame.size.height : 0;
+    public _shouldApplyStyleHandlers() {
+        var topFrame = frameModule.topmost();
+        return !!topFrame;
     }
 }
 
 class TapBarItemHandlerImpl extends NSObject {
-    static new(): TapBarItemHandlerImpl {
-        return <TapBarItemHandlerImpl>super.new();
-    }
+    private _owner: WeakRef<dts.ActionItemBase>;
 
-    private _owner: dts.ActionItemBase;
-
-    public initWithOwner(owner: dts.ActionItemBase): TapBarItemHandlerImpl {
-        this._owner = owner;
-        return this;
+    public static initWithOwner(owner: WeakRef<dts.ActionItemBase>): TapBarItemHandlerImpl {
+        let handler = <TapBarItemHandlerImpl>TapBarItemHandlerImpl.new();
+        handler._owner = owner;
+        return handler;
     }
 
     public tap(args) {
-        this._owner._raiseTap();
+        let owner = this._owner.get();
+        if (owner) {
+            owner._raiseTap();
+        }
     }
 
     public static ObjCExposedMethods = {

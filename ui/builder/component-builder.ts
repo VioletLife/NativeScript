@@ -1,17 +1,18 @@
-﻿import observable = require("data/observable");
-import view = require("ui/core/view");
-import bindable = require("ui/core/bindable");
-import dockLayoutDef = require("ui/layouts/dock-layout");
-import gridLayoutModule = require("ui/layouts/grid-layout");
-import absoluteLayoutDef = require("ui/layouts/absolute-layout");
+﻿import view = require("ui/core/view");
 import types = require("utils/types");
 import definition = require("ui/builder/component-builder");
 import fs = require("file-system");
-import gestures = require("ui/gestures");
-import bindingBuilder = require("ui/builder/binding-builder");
+import bindingBuilder = require("./binding-builder");
 import platform = require("platform");
+import pages = require("ui/page");
 
-var EVENT = "Event";
+//the imports below are needed for special property registration
+import "ui/layouts/dock-layout";
+import "ui/layouts/grid-layout";
+import "ui/layouts/absolute-layout";
+
+import {getSpecialPropertySetter} from "ui/builder/special-properties";
+
 var UI_PATH = "ui/";
 var MODULES = {
     "TabViewItem": "ui/tab-view",
@@ -22,13 +23,8 @@ var MODULES = {
     "SegmentedBarItem": "ui/segmented-bar",
 };
 
-var ROW = "row";
-var COL = "col";
-var COL_SPAN = "colSpan";
-var ROW_SPAN = "rowSpan";
-var DOCK = "dock";
-var LEFT = "left";
-var TOP = "top";
+var CODEFILE = "codeFile";
+var CSSFILE = "cssFile";
 
 export function getComponentModule(elementName: string, namespace: string, attributes: Object, exports: Object): definition.ComponentModule {
     var instance: view.View;
@@ -67,9 +63,43 @@ export function getComponentModule(elementName: string, namespace: string, attri
         throw new Error("Cannot create module " + moduleId + ". " + ex + ". StackTrace: " + ex.stack);
     }
 
-    if (instance && instanceModule) {
-        var bindings = new Array<bindable.BindingOptions>();
+    if (attributes) {
+        if (attributes[CODEFILE]) {
+            if (instance instanceof pages.Page) {
+                var codeFilePath = attributes[CODEFILE].trim();
+                if (codeFilePath.indexOf("~/") === 0) {
+                    codeFilePath = fs.path.join(fs.knownFolders.currentApp().path, codeFilePath.replace("~/", ""));
+                }
+                try {
+                    exports = require(codeFilePath);
+                    (<any>instance).exports = exports;
+                } catch (ex) {
+                    throw new Error(`Code file with path "${codeFilePath}" cannot be found!`);
+                }
+            } else {
+                throw new Error("Code file atribute is valid only for pages!");
+            }
+        }
 
+        if (attributes[CSSFILE]) {
+            if (instance instanceof pages.Page) {
+                var cssFilePath = attributes[CSSFILE].trim();
+                if (cssFilePath.indexOf("~/") === 0) {
+                    cssFilePath = fs.path.join(fs.knownFolders.currentApp().path, cssFilePath.replace("~/", ""));
+                }
+                if (fs.File.exists(cssFilePath)) {
+                    (<pages.Page>instance).addCssFile(cssFilePath);
+                    instance[CSSFILE] = true;
+                } else {
+                    throw new Error(`Css file with path "${cssFilePath}" cannot be found!`);
+                }
+            } else {
+                throw new Error("Css file atribute is valid only for pages!");
+            }
+        }
+    }
+
+    if (instance && instanceModule) {
         for (var attr in attributes) {
 
             var attrValue = <string>attributes[attr];
@@ -103,7 +133,7 @@ export function getComponentModule(elementName: string, namespace: string, attri
             }
         }
 
-        componentModule = { component: instance, exports: instanceModule, bindings: bindings };
+        componentModule = {component: instance, exports: instanceModule};
     }
 
     return componentModule;
@@ -111,23 +141,16 @@ export function getComponentModule(elementName: string, namespace: string, attri
 
 export function setPropertyValue(instance: view.View, instanceModule: Object, exports: Object, propertyName: string, propertyValue: string) {
     // Note: instanceModule can be null if we are loading custom compnenet with no code-behind.
-    var isEvent: boolean = instanceModule && isKnownEvent(propertyName, instanceModule[instance.typeName]);
 
     if (isBinding(propertyValue) && instance.bind) {
-        if (isEvent) {
-            attachEventBinding(instance, propertyName, propertyValue);
-        } else if (isGesture(propertyName, instance)) {
-            attachGestureBinding(instance, propertyName, propertyValue);
-        } else {
-            var bindOptions = bindingBuilder.getBindingOptions(propertyName, getBindingExpressionFromAttribute(propertyValue));
-            instance.bind({
-                sourceProperty: bindOptions[bindingBuilder.bindingConstants.sourceProperty],
-                targetProperty: bindOptions[bindingBuilder.bindingConstants.targetProperty],
-                expression: bindOptions[bindingBuilder.bindingConstants.expression],
-                twoWay: bindOptions[bindingBuilder.bindingConstants.twoWay]
-            }, bindOptions[bindingBuilder.bindingConstants.source]);
-        }
-    } else if (isEvent) {
+        var bindOptions = bindingBuilder.getBindingOptions(propertyName, getBindingExpressionFromAttribute(propertyValue));
+        instance.bind({
+            sourceProperty: bindOptions[bindingBuilder.bindingConstants.sourceProperty],
+            targetProperty: bindOptions[bindingBuilder.bindingConstants.targetProperty],
+            expression: bindOptions[bindingBuilder.bindingConstants.expression],
+            twoWay: bindOptions[bindingBuilder.bindingConstants.twoWay]
+        }, bindOptions[bindingBuilder.bindingConstants.source]);
+    } else if (view.isEventOrGesture(propertyName, instance)) {
         // Get the event handler from page module exports.
         var handler = exports && exports[propertyValue];
 
@@ -135,89 +158,32 @@ export function setPropertyValue(instance: view.View, instanceModule: Object, ex
         if (types.isFunction(handler)) {
             instance.on(propertyName, handler);
         }
-    } else if (isGesture(propertyName, instance)) {
-        // Get the event handler from page module exports.
-        var gestureHandler = exports && exports[propertyValue];
-
-        // Check if the handler is function and add it to the instance for specified gesture.
-        if (types.isFunction(gestureHandler)) {
-            instance.observe(gestures.fromString(propertyName.toLowerCase()), gestureHandler);
-        }
-    } else if (propertyName === ROW) {
-        gridLayoutModule.GridLayout.setRow(instance, !isNaN(+propertyValue) && +propertyValue);
-    } else if (propertyName === COL) {
-        gridLayoutModule.GridLayout.setColumn(instance, !isNaN(+propertyValue) && +propertyValue);
-    } else if (propertyName === COL_SPAN) {
-        gridLayoutModule.GridLayout.setColumnSpan(instance, !isNaN(+propertyValue) && +propertyValue);
-    } else if (propertyName === ROW_SPAN) {
-        gridLayoutModule.GridLayout.setRowSpan(instance, !isNaN(+propertyValue) && +propertyValue);
-    } else if (propertyName === LEFT) {
-        absoluteLayoutDef.AbsoluteLayout.setLeft(instance, !isNaN(+propertyValue) && +propertyValue);
-    } else if (propertyName === TOP) {
-        absoluteLayoutDef.AbsoluteLayout.setTop(instance, !isNaN(+propertyValue) && +propertyValue);
-    } else if (propertyName === DOCK) {
-        dockLayoutDef.DockLayout.setDock(instance, propertyValue);
     } else {
-        var attrHandled = false;
-
-        if ((<any>instance)._applyXmlAttribute) {
+        let attrHandled = false;
+        let specialSetter = getSpecialPropertySetter(propertyName);
+        if (!attrHandled && specialSetter) {
+            specialSetter(instance, propertyValue);
+            attrHandled = true;
+        }
+        if (!attrHandled && (<any>instance)._applyXmlAttribute) {
             attrHandled = (<any>instance)._applyXmlAttribute(propertyName, propertyValue);
         }
-
         if (!attrHandled) {
-            // Try to convert value to number.
-            var valueAsNumber = +propertyValue;
-            if (!isNaN(valueAsNumber)) {
-                instance[propertyName] = valueAsNumber;
-            } else if (propertyValue && (propertyValue.toLowerCase() === "true" || propertyValue.toLowerCase() === "false")) {
-                instance[propertyName] = propertyValue.toLowerCase() === "true" ? true : false;
-            } else {
+            if (propertyValue.trim() === "") {
                 instance[propertyName] = propertyValue;
+            } else {
+                // Try to convert value to number.
+                var valueAsNumber = +propertyValue;
+                if (!isNaN(valueAsNumber)) {
+                    instance[propertyName] = valueAsNumber;
+                } else if (propertyValue && (propertyValue.toLowerCase() === "true" || propertyValue.toLowerCase() === "false")) {
+                    instance[propertyName] = propertyValue.toLowerCase() === "true" ? true : false;
+                } else {
+                    instance[propertyName] = propertyValue;
+                }
             }
         }
     }
-}
-
-function attachEventBinding(instance: view.View, eventName: string, value: string) {
-    // Get the event handler from instance.bindingContext.
-    var propertyChangeHandler = (args: observable.PropertyChangeData) => {
-        if (args.propertyName === "bindingContext") {
-            var handler = instance.bindingContext && instance.bindingContext[getBindingExpressionFromAttribute(value)];
-            // Check if the handler is function and add it to the instance for specified event name.
-            if (types.isFunction(handler)) {
-                instance.on(eventName, handler, instance.bindingContext);
-            }
-            instance.off(observable.Observable.propertyChangeEvent, propertyChangeHandler);
-        }
-    };
-
-    instance.on(observable.Observable.propertyChangeEvent, propertyChangeHandler);
-}
-
-function attachGestureBinding(instance: view.View, gestureName: string, value: string) {
-    // Get the event handler from instance.bindingContext.
-    var propertyChangeHandler = (args: observable.PropertyChangeData) => {
-        if (args.propertyName === "bindingContext") {
-            var handler = instance.bindingContext && instance.bindingContext[getBindingExpressionFromAttribute(value)];
-            // Check if the handler is function and add it to the instance for specified event name.
-            if (types.isFunction(handler)) {
-                instance.observe(gestures.fromString(gestureName.toLowerCase()), handler, instance.bindingContext);
-            }
-            instance.off(observable.Observable.propertyChangeEvent, propertyChangeHandler);
-        }
-    };
-
-    instance.on(observable.Observable.propertyChangeEvent, propertyChangeHandler);
-}
-
-function isGesture(name: string, instance: any): boolean {
-    return gestures.fromString(name.toLowerCase()) !== undefined;
-}
-
-function isKnownEvent(name: string, exports: any): boolean {
-    var nameEvent = name + EVENT;
-    var result = !types.isNullOrUndefined(exports) ? nameEvent in exports : false;
-    return result;
 }
 
 function getBindingExpressionFromAttribute(value: string): string {

@@ -1,8 +1,6 @@
-﻿import common = require("ui/text-view/text-view-common");
+﻿import common = require("./text-view-common");
 
-// merge the exports of the common file with the exports of this file
-declare var exports;
-require("utils/module-merge").merge(common, exports);
+global.moduleMerge(common, exports);
 
 export class TextView extends common.TextView {
     public _configureEditText() {

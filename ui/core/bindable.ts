@@ -2,12 +2,21 @@
 import definition = require("ui/core/bindable");
 import dependencyObservable = require("ui/core/dependency-observable");
 import weakEvents = require("ui/core/weak-event-listener");
-import appModule = require("application");
 import types = require("utils/types");
 import trace = require("trace");
 import polymerExpressions = require("js-libs/polymer-expressions");
 import bindingBuilder = require("../builder/binding-builder");
 import viewModule = require("ui/core/view");
+
+//late import
+var _appModule = null;
+
+function appModule() {
+    if (!_appModule) {
+        _appModule = require("application");
+    }
+    return _appModule;
+}
 
 var bindingContextProperty = new dependencyObservable.Property(
     "bindingContext",
@@ -26,8 +35,6 @@ var contextKey = "context";
 // from $parents[1] will return 1
 var paramsRegex = /\[\s*(['"])*(\w*)\1\s*\]/;
 
-// this regex is used to search for all instaces of '$parents[]' within an expression
-var parentsRegex = /\$parents\s*\[\s*(['"]*)\w*\1\s*\]/g;
 var bc = bindingBuilder.bindingConstants;
 
 export class Bindable extends dependencyObservable.DependencyObservable implements definition.Bindable {
@@ -35,7 +42,14 @@ export class Bindable extends dependencyObservable.DependencyObservable implemen
     public static bindingContextProperty = bindingContextProperty;
 
     // TODO: Implement with WeakRef to prevent memory leaks.
-    private _bindings = {};
+    private _bindings: Object;
+
+    private get bindings(): Object {
+        if (!this._bindings) {
+            this._bindings = {};
+        }
+        return this._bindings;
+    }
 
     get bindingContext(): Object {
         return this._getValue(Bindable.bindingContextProperty);
@@ -45,13 +59,13 @@ export class Bindable extends dependencyObservable.DependencyObservable implemen
     }
 
     public bind(options: definition.BindingOptions, source?: Object) {
-        var binding: Binding = this._bindings[options.targetProperty];
+        var binding: Binding = this.bindings[options.targetProperty];
         if (binding) {
             binding.unbind();
         }
 
         binding = new Binding(this, options);
-        this._bindings[options.targetProperty] = binding;
+        this.bindings[options.targetProperty] = binding;
 
         var bindingSource = source;
         if (!bindingSource) {
@@ -64,15 +78,15 @@ export class Bindable extends dependencyObservable.DependencyObservable implemen
     }
 
     public unbind(property: string) {
-        var binding: Binding = this._bindings[property];
+        var binding: Binding = this.bindings[property];
         if (binding) {
             binding.unbind();
-            delete this._bindings[property];
+            delete this.bindings[property];
         }
     }
 
     public _updateTwoWayBinding(propertyName: string, value: any) {
-        var binding: Binding = this._bindings[propertyName];
+        var binding: Binding = this.bindings[propertyName];
 
         if (binding) {
             binding.updateTwoWay(value);
@@ -92,7 +106,7 @@ export class Bindable extends dependencyObservable.DependencyObservable implemen
                 return;
             }
         }
-        var binding = this._bindings[property.name];
+        var binding = this.bindings[property.name];
         if (binding && !binding.updating) {
             if (binding.options.twoWay) {
                 trace.write("_updateTwoWayBinding(" + this + "): " + property.name, trace.categories.Binding);
@@ -107,8 +121,8 @@ export class Bindable extends dependencyObservable.DependencyObservable implemen
 
     public _onBindingContextChanged(oldValue: any, newValue: any) {
         var binding: Binding;
-        for (var p in this._bindings) {
-            binding = this._bindings[p];
+        for (var p in this.bindings) {
+            binding = this.bindings[p];
 
             if (binding.updating || !binding.sourceIsBindingContext) {
                 continue;
@@ -133,8 +147,21 @@ export class Binding {
     source: WeakRef<Object>;
     target: WeakRef<Bindable>;
 
+    public loadedHandlerVisualTreeBinding(args) {
+        var targetInstance = args.object;
+        targetInstance.off(viewModule.View.loadedEvent, this.loadedHandlerVisualTreeBinding, this);
+        this.unbind();
+        if (!types.isNullOrUndefined(targetInstance.bindingContext)) {
+            this.bind(targetInstance.bindingContext);
+        }
+    };
+
+    private propertyChangeListeners = {};
+
     private sourceOptions: { instance: WeakRef<any>; property: any };
     private targetOptions: { instance: WeakRef<any>; property: any };
+
+    private sourcePropertiesArray: Array<string>;
 
     constructor(target: Bindable, options: definition.BindingOptions) {
         this.target = new WeakRef(target);
@@ -160,20 +187,99 @@ export class Binding {
         }
         /* tslint:enable */
         this.source = new WeakRef(obj);
-        this.updateTarget(this.getSourceProperty());
+        this.updateTarget(this.getSourcePropertyValue());
 
         if (!this.sourceOptions) {
-            this.sourceOptions = this.resolveOptions(this.source, this.options.sourceProperty);
+            this.sourceOptions = this.resolveOptions(this.source, this.getSourceProperties());
         }
 
-        if (this.sourceOptions) {
-            var sourceOptionsInstance = this.sourceOptions.instance.get();
-            if (sourceOptionsInstance instanceof observable.Observable) {
-                weakEvents.addWeakEventListener(
-                    sourceOptionsInstance,
-                    observable.Observable.propertyChangeEvent,
-                    this.onSourcePropertyChanged,
-                    this);
+        this.addPropertyChangeListeners(this.source, this.getSourceProperties());
+    }
+
+    private getSourceProperties(): Array<string> {
+        if (!this.sourcePropertiesArray) {
+            this.sourcePropertiesArray = Binding.getProperties(this.options.sourceProperty);
+        }
+        return this.sourcePropertiesArray;
+    }
+
+    private static getProperties(property: string): Array<string> {
+        var result: Array<string>;
+        if (property) {
+            // first replace all '$parents[..]' with a safe string
+            // second removes all ] since they are not important for property access and not needed 
+            // then split properties either on '.' or '['
+            var parentsMatches = property.match(bindingBuilder.parentsRegex);
+            result = property.replace(bindingBuilder.parentsRegex, "parentsMatch")
+                                    .replace(/\]/g, "")
+                                    .split(/\.|\[/);
+
+            var i;
+            var resultLength = result.length;
+            var parentsMatchesCounter = 0;
+            for (i = 0; i < resultLength; i++) {
+                if (result[i] === "parentsMatch") {
+                    result[i] = parentsMatches[parentsMatchesCounter];
+                    parentsMatchesCounter++;
+                }
+            }
+
+            return result;
+        }
+        else {
+            return [];
+        }
+    }
+
+    private resolveObjectsAndProperties(source: Object, propsArray: Array<string>) {
+        var result = [];
+        var i;
+        var propsArrayLength = propsArray.length;
+        var currentObject = source;
+        var objProp = "";
+        var currentObjectChanged = false;
+        for (i = 0; i < propsArrayLength; i++) {
+            objProp = propsArray[i];
+            if (propsArray[i] === bc.bindingValueKey) {
+                currentObjectChanged = true;
+            }
+            if (propsArray[i] === bc.parentValueKey || propsArray[i].indexOf(bc.parentsValueKey) === 0) {
+                var parentView = this.getParentView(this.target.get(), propsArray[i]).view;
+                if (parentView) {
+                    currentObject = parentView.bindingContext;
+                }
+                else {
+                    var targetInstance = this.target.get();
+                    targetInstance.off(viewModule.View.loadedEvent, this.loadedHandlerVisualTreeBinding, this);
+                    targetInstance.on(viewModule.View.loadedEvent, this.loadedHandlerVisualTreeBinding, this);
+                }
+                currentObjectChanged = true;
+            }
+            result.push({ instance: currentObject, property: objProp });
+            if (!currentObjectChanged) {
+                currentObject = currentObject[propsArray[i]];
+                currentObjectChanged = false;
+            }
+        }
+        return result;
+    }
+
+    private addPropertyChangeListeners(source: WeakRef<Object>, sourceProperty: Array<string>) {
+        var objectsAndProperties = this.resolveObjectsAndProperties(source.get(), sourceProperty)
+        var objectsAndPropertiesLength = objectsAndProperties.length;
+        if (objectsAndPropertiesLength > 0) {
+            var i;
+            for (i = 0; i < objectsAndPropertiesLength; i++) {
+                var prop = objectsAndProperties[i].property;
+                var currentObject = objectsAndProperties[i].instance;
+                if (!this.propertyChangeListeners[prop] && currentObject instanceof observable.Observable) {
+                    weakEvents.addWeakEventListener(
+                        currentObject,
+                        observable.Observable.propertyChangeEvent,
+                        this.onSourcePropertyChanged,
+                        this);
+                    this.propertyChangeListeners[prop] = currentObject;
+                }
             }
         }
     }
@@ -183,14 +289,15 @@ export class Binding {
             return;
         }
 
-        if (this.sourceOptions) {
-            var sourceOptionsInstance = this.sourceOptions.instance.get();
-            if (sourceOptionsInstance) {
-                weakEvents.removeWeakEventListener(sourceOptionsInstance,
-                    observable.Observable.propertyChangeEvent,
-                    this.onSourcePropertyChanged,
-                    this);
-            }
+        var i;
+        var propertyChangeListenersKeys = Object.keys(this.propertyChangeListeners);
+        for (i = 0; i < propertyChangeListenersKeys.length; i++) {
+            weakEvents.removeWeakEventListener(
+                this.propertyChangeListeners[propertyChangeListenersKeys[i]],
+                observable.Observable.propertyChangeEvent,
+                this.onSourcePropertyChanged,
+                this);
+            delete this.propertyChangeListeners[propertyChangeListenersKeys[i]];
         }
 
         if (this.source) {
@@ -203,6 +310,7 @@ export class Binding {
         if (this.targetOptions) {
             this.targetOptions = undefined;
         }
+        this.sourcePropertiesArray = undefined;
     }
 
     private prepareExpressionForUpdate(): string {
@@ -260,16 +368,16 @@ export class Binding {
             if (exp) {
                 var context = this.source && this.source.get && this.source.get() || global;
                 var model = {};
-                for (var prop in appModule.resources) {
-                    if (appModule.resources.hasOwnProperty(prop) && !context.hasOwnProperty(prop)) {
-                        context[prop] = appModule.resources[prop];
+                for (var prop in appModule().resources) {
+                    if (appModule().resources.hasOwnProperty(prop) && !context.hasOwnProperty(prop)) {
+                        context[prop] = appModule().resources[prop];
                     }
                 }
 
                 this.prepareContextForExpression(context, expression);
 
-				model[contextKey] = context;
-				return exp.getValue(model, isBackConvert, changedModel);
+                model[contextKey] = context;
+                return exp.getValue(model, isBackConvert, changedModel);
             }
             return new Error(expression + " is not a valid expression.");
         }
@@ -281,7 +389,6 @@ export class Binding {
 
     public onSourcePropertyChanged(data: observable.PropertyChangeData) {
         if (this.options.expression) {
-            //this.prepareContextForExpression(this.source.get(), this.options.expression);
             var expressionValue = this._getExpressionValue(this.options.expression, false, undefined);
             if (expressionValue instanceof Error) {
                 trace.write((<Error>expressionValue).message, trace.categories.Binding, trace.messageType.error);
@@ -289,8 +396,47 @@ export class Binding {
             else {
                 this.updateTarget(expressionValue);
             }
-        } else if (data.propertyName === this.sourceOptions.property) {
-            this.updateTarget(data.value);
+        } else {
+            var propIndex = this.getSourceProperties().indexOf(data.propertyName);
+            if (propIndex > -1) {
+                var props = this.getSourceProperties().slice(propIndex + 1);
+                var propsLength = props.length;
+                if (propsLength > 0) {
+                    var value = data.value;
+                    var i;
+                    for (i = 0; i < propsLength; i++) {
+                        value = value[props[i]];
+                    }
+                    this.updateTarget(value);
+                }
+                else if (data.propertyName === this.sourceOptions.property) {
+                    this.updateTarget(data.value);
+                }
+            }
+        }
+
+        var sourceProps = Binding.getProperties(this.options.sourceProperty);
+        var sourcePropsLength = sourceProps.length;
+        var changedPropertyIndex = sourceProps.indexOf(data.propertyName);
+        if (changedPropertyIndex > -1) {
+            var probablyChangedObject = this.propertyChangeListeners[sourceProps[changedPropertyIndex + 1]];
+            if (probablyChangedObject &&
+                probablyChangedObject !== data.object[sourceProps[changedPropertyIndex]]) {
+                // remove all weakevent listeners after change, because changed object replaces object that is hooked for
+                // propertyChange event
+                for (i = sourcePropsLength - 1; i > changedPropertyIndex; i--) {
+                    weakEvents.removeWeakEventListener(
+                        this.propertyChangeListeners[sourceProps[i]],
+                        observable.Observable.propertyChangeEvent,
+                        this.onSourcePropertyChanged,
+                        this);
+                    delete this.propertyChangeListeners[sourceProps[i]];
+                }
+                //var newProps = this.options.sourceProperty.substr(this.options.sourceProperty.indexOf(data.propertyName) + data.propertyName.length + 1);
+                var newProps = sourceProps.slice(changedPropertyIndex + 1);
+                // add new weakevent listeners
+                this.addPropertyChangeListeners(new WeakRef(data.object[sourceProps[changedPropertyIndex]]), newProps);
+            }
         }
     }
 
@@ -304,7 +450,7 @@ export class Binding {
             }
         }
 
-        var parentsArray = expression.match(parentsRegex);
+        var parentsArray = expression.match(bindingBuilder.parentsRegex);
         if (parentsArray) {
             var i;
             for (i = 0; i < parentsArray.length; i++) {
@@ -317,11 +463,10 @@ export class Binding {
         }
     }
 
-    private getSourceProperty() {
+    private getSourcePropertyValue() {
         if (this.options.expression) {
             var changedModel = {};
             changedModel[bc.bindingValueKey] = this.source.get();
-            //this.prepareContextForExpression(this.source.get(), this.options.expression);
             var expressionValue = this._getExpressionValue(this.options.expression, false, changedModel);
             if (expressionValue instanceof Error) {
                 trace.write((<Error>expressionValue).message, trace.categories.Binding, trace.messageType.error);
@@ -332,7 +477,7 @@ export class Binding {
         }
 
         if (!this.sourceOptions) {
-            this.sourceOptions = this.resolveOptions(this.source, this.options.sourceProperty);
+            this.sourceOptions = this.resolveOptions(this.source, this.getSourceProperties());
         }
 
         var value;
@@ -359,7 +504,7 @@ export class Binding {
         }
 
         if (!this.targetOptions) {
-            this.targetOptions = this.resolveOptions(this.target, this.options.targetProperty);
+            this.targetOptions = this.resolveOptions(this.target, Binding.getProperties(this.options.targetProperty));
         }
 
         this.updateOptions(this.targetOptions, value);
@@ -371,7 +516,7 @@ export class Binding {
         }
 
         if (!this.sourceOptions) {
-            this.sourceOptions = this.resolveOptions(this.source, this.options.sourceProperty);
+            this.sourceOptions = this.resolveOptions(this.source, this.getSourceProperties());
         }
 
         this.updateOptions(this.sourceOptions, value);
@@ -379,10 +524,10 @@ export class Binding {
 
     private getParentView(target, property) {
         if (!target || !(target instanceof viewModule.View)) {
-            return {view: null, index: null};
+            return { view: null, index: null };
         }
-        
-        var result;        
+
+        var result;
         if (property === bc.parentValueKey) {
             result = target.parent;
         }
@@ -394,7 +539,7 @@ export class Binding {
             if (indexParams && indexParams.length > 1) {
                 index = indexParams[2];
             }
-            
+
             if (!isNaN(index)) {
                 var indexAsInt = parseInt(index);
                 while (indexAsInt > 0) {
@@ -402,7 +547,7 @@ export class Binding {
                     indexAsInt--;
                 }
             }
-            else {
+            else if (types.isString(index)) {
                 while (result && result.typeName !== index) {
                     result = result.parent;
                 }
@@ -412,51 +557,19 @@ export class Binding {
         return { view: result, index: index };
     }
 
-    private resolveOptions(obj: WeakRef<any>, property: string): { instance: any; property: any } {
-        var options;
-
-        if (property === bc.bindingValueKey) {
-            options = {
-                instance: obj,
-                property: property
-            };
-            return options;
-        }
-
-        if (types.isString(property) && property.indexOf(".") !== -1) {
-            var properties = property.split(".");
-
-            var i: number;
-            var currentObject = obj.get();
-
-            for (i = 0; i < properties.length - 1; i++) {
-                if (properties[i] === bc.bindingValueKey) {
-                    continue;
-                }
-                if (properties[i] === bc.parentValueKey || properties[i].indexOf(bc.parentsValueKey) === 0) {
-                    var parentView = this.getParentView(this.target.get(), properties[i]).view;
-                    if (parentView) {
-                        currentObject = parentView.bindingContext;
-                    }
-                    continue;
-                }
-                currentObject = currentObject[properties[i]];
-            }
-
-            if (!types.isNullOrUndefined(currentObject)) {
-                options = {
-                    instance: new WeakRef(currentObject),
-                    property: properties[properties.length - 1]
-                }
-            }
-        } else {
-            options = {
-                instance: obj,
-                property: property
+    private resolveOptions(obj: WeakRef<any>, properties: Array<string>): { instance: any; property: any } {
+        var objectsAndProperties = this.resolveObjectsAndProperties(obj.get(), properties);
+        if (objectsAndProperties.length > 0) {
+            var resolvedObj = objectsAndProperties[objectsAndProperties.length - 1].instance;
+            var prop = objectsAndProperties[objectsAndProperties.length - 1].property;
+            return {
+                instance: new WeakRef(resolvedObj),
+                property: prop
             }
         }
-
-        return options;
+        else {
+            return null;
+        }
     }
 
     private updateOptions(options: { instance: WeakRef<any>; property: any }, value: any) {
@@ -471,10 +584,18 @@ export class Binding {
         this.updating = true;
 
         try {
-            if (optionsInstance instanceof observable.Observable) {
-                optionsInstance.set(options.property, value);
+            if (optionsInstance instanceof Bindable &&
+                viewModule.isEventOrGesture(options.property, optionsInstance) &&
+                types.isFunction(value)) {
+                // calling off method with null as handler will remove all handlers for options.property event
+                optionsInstance.off(options.property, null, optionsInstance.bindingContext);
+                optionsInstance.on(options.property, value, optionsInstance.bindingContext);
             } else {
-                optionsInstance[options.property] = value;
+                if (optionsInstance instanceof observable.Observable) {
+                    optionsInstance.set(options.property, value);
+                } else {
+                    optionsInstance[options.property] = value;
+                }
             }
         }
         catch (ex) {

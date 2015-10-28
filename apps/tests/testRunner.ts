@@ -7,7 +7,7 @@ import uiTestModule = require("./ui-test");
 
 frameModule.Frame.defaultAnimatedNavigation = false;
 
-function isRunningOnEmulator(): boolean {
+export function isRunningOnEmulator(): boolean {
     // This checks are not good enough to be added to modules but keeps unittests green.
 
     if (platform.device.os === platform.platformNames.android) {
@@ -18,11 +18,13 @@ function isRunningOnEmulator(): boolean {
             android.os.Build.PRODUCT.toLocaleLowerCase().indexOf("emulator") > -1; // VS Emulator
     }
     else if (platform.device.os === platform.platformNames.ios) {
-        return platform.device.model === "iPhone Simulator";
+        //return platform.device.model === "iPhone Simulator";
+        return (__dirname.search("Simulator") > -1);
     }
 }
 
 export var allTests = {};
+allTests["SCROLL-VIEW"] = require("./ui/scroll-view/scroll-view-tests");
 allTests["ACTION-BAR"] = require("./ui/action-bar/action-bar-tests");
 allTests["XML-DECLARATION"] = require("./xml-declaration/xml-declaration-tests");
 allTests["APPLICATION"] = require("./application-tests");
@@ -33,7 +35,6 @@ allTests["GRIDLAYOUT"] = require("./layouts/grid-layout-tests");
 allTests["STACKLAYOUT"] = require("./layouts/stack-layout-tests");
 allTests["PLATFORM"] = require("./platform-tests");
 allTests["STYLE-PROPERTIES"] = require("./ui/style/style-properties-tests");
-allTests["SCROLL-VIEW"] = require("./ui/scroll-view/scroll-view-tests");
 allTests["FILE SYSTEM"] = require("./file-system-tests");
 allTests["HTTP"] = require("./http-tests");
 allTests["XHR"] = require("./xhr-tests");
@@ -44,7 +45,7 @@ allTests["TIMER"] = require("./timer-tests");
 allTests["COLOR"] = require("./color-tests");
 allTests["OBSERVABLE-ARRAY"] = require("./observable-array-tests");
 allTests["VIRTUAL-ARRAY"] = require("./virtual-array-tests");
-allTests["OBSERVABLE"] = require("./ui/observable-tests");
+allTests["OBSERVABLE"] = require("./observable-tests");
 allTests["DEPENDENCY-OBSERVABLE"] = require("./ui/dependency-observable-tests");
 allTests["BINDABLE"] = require("./ui/bindable-tests");
 allTests["BINDING-EXPRESSIONS"] = require("./ui/binding-expressions-tests");
@@ -57,10 +58,12 @@ allTests["BUTTON"] = require("./ui/button/button-tests");
 allTests["BORDER"] = require("./ui/border/border-tests");
 allTests["LABEL"] = require("./ui/label/label-tests");
 allTests["TAB-VIEW"] = require("./ui/tab-view/tab-view-tests");
+allTests["TAB-VIEW-NAVIGATION"] = require("./ui/tab-view/tab-view-navigation-tests");
 allTests["IMAGE"] = require("./ui/image/image-tests");
 allTests["SLIDER"] = require("./ui/slider/slider-tests");
 allTests["SWITCH"] = require("./ui/switch/switch-tests");
 allTests["PROGRESS"] = require("./ui/progress/progress-tests");
+allTests["PLACEHOLDER"] = require("./ui/placeholder/placeholder-tests");
 allTests["PAGE"] = require("./ui/page/page-tests");
 allTests["LISTVIEW"] = require("./ui/list-view/list-view-tests");
 allTests["ACTIVITY-INDICATOR"] = require("./ui/activity-indicator/activity-indicator-tests");
@@ -78,10 +81,15 @@ allTests["WEAK-EVENTS"] = require("./weak-event-listener-tests");
 allTests["REPEATER"] = require("./ui/repeater/repeater-tests");
 allTests["SEARCH-BAR"] = require('./ui/search-bar/search-bar-tests');
 allTests["CONNECTIVITY"] = require("./connectivity-tests");
+allTests["SEGMENTED-BAR"] = require("./ui/segmented-bar/segmented-bar-tests");
 
 if (!isRunningOnEmulator()) {
+    allTests["ANIMATION"] = require("./ui/animation/animation-tests");
     allTests["LOCATION"] = require("./location-tests");
 }
+
+// Navigation tests should always be last.
+allTests["NAVIGATION"] = require("./navigation-tests");
 
 import utils = require("utils/utils");
 var density = utils.layout.getDisplayDensity();
@@ -121,6 +129,18 @@ function printRunTestStats() {
     }
 }
 
+function startLog(): void {
+    let testsName: string = this.name;
+    TKUnit.write("START " + testsName + " TESTS.", trace.messageType.info);
+    this.start = TKUnit.time();
+}
+
+function log(): void {
+    let testsName: string = this.name;
+    let duration = TKUnit.time() - this.start;
+    TKUnit.write(testsName + " COMPLETED for " + duration, trace.messageType.info);
+}
+
 export var runAll = function (moduleName?: string) {
     if (running) {
         // TODO: We may schedule pending run requests
@@ -136,18 +156,17 @@ export var runAll = function (moduleName?: string) {
         }
 
         var testModule = allTests[name];
-        //var moduleStart = function (moduleName) {
-        //    return function () {
-        //        TKUnit.write("--- " + moduleName + " TESTS BEGIN ---", trace.messageType.info);
-        //    }
-        //};
-        //testsQueue.push(new TestInfo(moduleStart(name)));
 
         var test = testModule.createTestCase ? testModule.createTestCase() : testModule;
+        test.name = name;
+        
+
+        testsQueue.push(new TestInfo(startLog, test));
 
         if (test.setUpModule) {
             testsQueue.push(new TestInfo(test.setUpModule, test));
         }
+
 
         for (var testName in test) {
             var testFunction = test[testName];
@@ -165,13 +184,7 @@ export var runAll = function (moduleName?: string) {
         if (test.tearDownModule) {
             testsQueue.push(new TestInfo(test.tearDownModule, test));
         }
-        
-        //var moduleEnd = function (moduleName) {
-        //    return function () {
-        //        TKUnit.write("--- " + moduleName + " TESTS COMPLETE --- ", trace.messageType.info);
-        //    };
-        //}
-        //testsQueue.push(new TestInfo(moduleEnd(name)));
+        testsQueue.push(new TestInfo(log, test));
     }
 
     testsQueue.push(new TestInfo(printRunTestStats));
